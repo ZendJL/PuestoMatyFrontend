@@ -21,6 +21,8 @@ export default function AltasProductos() {
   const [descripcionEdit, setDescripcionEdit] = useState('');
   const [precioEdit, setPrecioEdit] = useState('');
   const [activoEdit, setActivoEdit] = useState(true);
+  const [codigoEdit, setCodigoEdit] = useState('');
+
 
   const queryClient = useQueryClient();
 
@@ -36,8 +38,8 @@ export default function AltasProductos() {
   const productos = Array.isArray(productosRaw)
     ? productosRaw
     : Array.isArray(productosRaw?.content)
-    ? productosRaw.content
-    : [];
+      ? productosRaw.content
+      : [];
 
   const productosFiltrados = productos
     .filter((p) => {
@@ -116,53 +118,61 @@ export default function AltasProductos() {
   };
 
   const guardarCambiosProducto = async () => {
-    if (!productoSeleccionado) {
-      alert('Selecciona un producto primero');
-      return;
-    }
+  if (!productoSeleccionado) {
+    alert('Selecciona un producto primero');
+    return;
+  }
 
-    const nuevaDescripcion =
-      descripcionEdit.trim() || productoSeleccionado.descripcion;
-    const nuevoPrecio =
-      precioEdit === ''
-        ? productoSeleccionado.precio
-        : Number(precioEdit);
+  const nuevaDescripcion =
+    descripcionEdit.trim() || productoSeleccionado.descripcion;
+  const nuevoPrecio =
+    precioEdit === ''
+      ? productoSeleccionado.precio
+      : Number(precioEdit);
 
-    if (!nuevaDescripcion) {
-      alert('La descripción no puede quedar vacía');
-      return;
-    }
-    if (Number.isNaN(nuevoPrecio) || nuevoPrecio < 0) {
-      alert('El precio debe ser un número mayor o igual a 0');
-      return;
-    }
+  if (!nuevaDescripcion) {
+    alert('La descripción no puede quedar vacía');
+    return;
+  }
+  if (Number.isNaN(nuevoPrecio) || nuevoPrecio < 0) {
+    alert('El precio debe ser un número mayor o igual a 0');
+    return;
+  }
 
-    try {
-      const body = {
-        ...productoSeleccionado,
-        descripcion: nuevaDescripcion,
-        precio: nuevoPrecio,
-        activo: activoEdit,
-      };
+  try {
+    const body = {
+      ...productoSeleccionado,
+      codigo: codigoEdit.trim() || productoSeleccionado.codigo,
+      descripcion: nuevaDescripcion,
+      precio: nuevoPrecio,
+      activo: activoEdit,
+    };
 
-      const res = await axios.put(
-        `/api/productos/${productoSeleccionado.id}`,
-        body
-      );
+    const res = await axios.put(
+      `/api/productos/${productoSeleccionado.id}`,
+      body
+    );
 
-      alert('✅ Producto actualizado correctamente');
-      setProductoSeleccionado(res.data);
-      setDescripcionEdit('');
-      setPrecioEdit('');
-      setActivoEdit(res.data.activo ?? true);
+    alert('✅ Producto actualizado correctamente');
 
-      queryClient.invalidateQueries({ queryKey: ['productos-altas'] });
-      queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
-    } catch (err) {
-      console.error(err);
-      alert('❌ Error al actualizar producto');
-    }
-  };
+    // actualizar cache
+    queryClient.invalidateQueries({ queryKey: ['productos-altas'] });
+    queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
+
+    // limpiar selección y campos de edición -> esto es lo que lo oculta
+    setProductoSeleccionado(null);
+    setDescripcionEdit('');
+    setPrecioEdit('');
+    setCodigoEdit('');
+    setActivoEdit(true);
+    setCantidadAgregar('');
+    setBusquedaProducto('');
+  } catch (err) {
+    console.error(err);
+    alert('❌ Error al actualizar producto');
+  }
+};
+
 
   return (
     <div className="row g-3">
@@ -307,12 +317,9 @@ export default function AltasProductos() {
                           setProductoSeleccionado(p);
                           setBusquedaProducto(p.descripcion);
                           setDescripcionEdit(p.descripcion || '');
-                          setPrecioEdit(
-                            p.precio != null ? String(p.precio) : ''
-                          );
-                          setActivoEdit(
-                            p.activo == null ? true : p.activo
-                          );
+                          setPrecioEdit(p.precio != null ? String(p.precio) : '');
+                          setActivoEdit(p.activo == null ? true : p.activo);
+                          setCodigoEdit(p.codigo || '');              // ← nuevo
                         }}
                       >
                         <td className="text-truncate" style={{ maxWidth: 240 }}>
@@ -409,6 +416,15 @@ export default function AltasProductos() {
                       onChange={(e) => setPrecioEdit(e.target.value)}
                     />
                   </div>
+                </div>
+                <div className="mb-2">
+                  <label className="form-label mb-1">Modificar código</label>
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    value={codigoEdit}
+                    onChange={(e) => setCodigoEdit(e.target.value)}
+                  />
                 </div>
 
                 <div className="mb-3 form-check">

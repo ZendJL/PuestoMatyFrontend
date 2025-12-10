@@ -6,6 +6,7 @@ const estadoInicial = {
   codigo: '',
   descripcion: '',
   precio: '',
+  precioCompra: '',      // costo de compra
   proveedor: '',
   cantidad: '',
 };
@@ -20,9 +21,9 @@ export default function AltasProductos() {
   const [cantidadAgregar, setCantidadAgregar] = useState('');
   const [descripcionEdit, setDescripcionEdit] = useState('');
   const [precioEdit, setPrecioEdit] = useState('');
+  const [precioCompraEdit, setPrecioCompraEdit] = useState(''); // costo de compra
   const [activoEdit, setActivoEdit] = useState(true);
   const [codigoEdit, setCodigoEdit] = useState('');
-
 
   const queryClient = useQueryClient();
 
@@ -69,9 +70,11 @@ export default function AltasProductos() {
         codigo: form.codigo,
         descripcion: form.descripcion,
         precio: parseFloat(form.precio),
+        precioCompra:
+          form.precioCompra === '' ? null : parseFloat(form.precioCompra),
         proveedor: form.proveedor || null,
         cantidad: parseInt(form.cantidad, 10),
-        activo: true, // nuevo producto activo por defecto
+        activo: true,
       };
 
       await axios.post('/api/productos', producto);
@@ -118,61 +121,69 @@ export default function AltasProductos() {
   };
 
   const guardarCambiosProducto = async () => {
-  if (!productoSeleccionado) {
-    alert('Selecciona un producto primero');
-    return;
-  }
+    if (!productoSeleccionado) {
+      alert('Selecciona un producto primero');
+      return;
+    }
 
-  const nuevaDescripcion =
-    descripcionEdit.trim() || productoSeleccionado.descripcion;
-  const nuevoPrecio =
-    precioEdit === ''
-      ? productoSeleccionado.precio
-      : Number(precioEdit);
+    const nuevaDescripcion =
+      descripcionEdit.trim() || productoSeleccionado.descripcion;
+    const nuevoPrecio =
+      precioEdit === '' ? productoSeleccionado.precio : Number(precioEdit);
+    const nuevoPrecioCompra =
+      precioCompraEdit === ''
+        ? productoSeleccionado.precioCompra
+        : Number(precioCompraEdit);
 
-  if (!nuevaDescripcion) {
-    alert('La descripción no puede quedar vacía');
-    return;
-  }
-  if (Number.isNaN(nuevoPrecio) || nuevoPrecio < 0) {
-    alert('El precio debe ser un número mayor o igual a 0');
-    return;
-  }
+    if (!nuevaDescripcion) {
+      alert('La descripción no puede quedar vacía');
+      return;
+    }
+    if (Number.isNaN(nuevoPrecio) || nuevoPrecio < 0) {
+      alert('El precio debe ser un número mayor o igual a 0');
+      return;
+    }
+    if (
+      nuevoPrecioCompra != null &&
+      (Number.isNaN(nuevoPrecioCompra) || nuevoPrecioCompra < 0)
+    ) {
+      alert('El costo de compra debe ser un número mayor o igual a 0');
+      return;
+    }
 
-  try {
-    const body = {
-      ...productoSeleccionado,
-      codigo: codigoEdit.trim() || productoSeleccionado.codigo,
-      descripcion: nuevaDescripcion,
-      precio: nuevoPrecio,
-      activo: activoEdit,
-    };
+    try {
+      const body = {
+        ...productoSeleccionado,
+        codigo: codigoEdit.trim() || productoSeleccionado.codigo,
+        descripcion: nuevaDescripcion,
+        precio: nuevoPrecio,
+        precioCompra: nuevoPrecioCompra,
+        activo: activoEdit,
+      };
 
-    const res = await axios.put(
-      `/api/productos/${productoSeleccionado.id}`,
-      body
-    );
+      const res = await axios.put(
+        `/api/productos/${productoSeleccionado.id}`,
+        body
+      );
 
-    alert('✅ Producto actualizado correctamente');
+      alert('✅ Producto actualizado correctamente');
 
-    // actualizar cache
-    queryClient.invalidateQueries({ queryKey: ['productos-altas'] });
-    queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
+      queryClient.invalidateQueries({ queryKey: ['productos-altas'] });
+      queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
 
-    // limpiar selección y campos de edición -> esto es lo que lo oculta
-    setProductoSeleccionado(null);
-    setDescripcionEdit('');
-    setPrecioEdit('');
-    setCodigoEdit('');
-    setActivoEdit(true);
-    setCantidadAgregar('');
-    setBusquedaProducto('');
-  } catch (err) {
-    console.error(err);
-    alert('❌ Error al actualizar producto');
-  }
-};
-
+      setProductoSeleccionado(null);
+      setDescripcionEdit('');
+      setPrecioEdit('');
+      setPrecioCompraEdit('');
+      setCodigoEdit('');
+      setActivoEdit(true);
+      setCantidadAgregar('');
+      setBusquedaProducto('');
+    } catch (err) {
+      console.error(err);
+      alert('❌ Error al actualizar producto');
+    }
+  };
 
   return (
     <div className="row g-3">
@@ -212,7 +223,7 @@ export default function AltasProductos() {
               </div>
 
               <div className="col-md-4">
-                <label className="form-label mb-1">Precio</label>
+                <label className="form-label mb-1">Precio venta</label>
                 <div className="input-group input-group-sm">
                   <span className="input-group-text">$</span>
                   <input
@@ -224,6 +235,22 @@ export default function AltasProductos() {
                     value={form.precio}
                     onChange={handleChange}
                     required
+                  />
+                </div>
+              </div>
+
+              <div className="col-md-4">
+                <label className="form-label mb-1">Costo de compra</label>
+                <div className="input-group input-group-sm">
+                  <span className="input-group-text">$</span>
+                  <input
+                    type="number"
+                    name="precioCompra"
+                    className="form-control"
+                    step="0.01"
+                    min="0"
+                    value={form.precioCompra}
+                    onChange={handleChange}
                   />
                 </div>
               </div>
@@ -317,9 +344,16 @@ export default function AltasProductos() {
                           setProductoSeleccionado(p);
                           setBusquedaProducto(p.descripcion);
                           setDescripcionEdit(p.descripcion || '');
-                          setPrecioEdit(p.precio != null ? String(p.precio) : '');
+                          setPrecioEdit(
+                            p.precio != null ? String(p.precio) : ''
+                          );
+                          setPrecioCompraEdit(
+                            p.precioCompra != null
+                              ? String(p.precioCompra)
+                              : ''
+                          );
                           setActivoEdit(p.activo == null ? true : p.activo);
-                          setCodigoEdit(p.codigo || '');              // ← nuevo
+                          setCodigoEdit(p.codigo || '');
                         }}
                       >
                         <td className="text-truncate" style={{ maxWidth: 240 }}>
@@ -331,6 +365,9 @@ export default function AltasProductos() {
                         <td className="text-end align-middle">
                           <div className="fw-semibold text-success">
                             ${p.precio}
+                          </div>
+                          <div className="text-muted small">
+                            Costo compra: {p.precioCompra ?? '-'}
                           </div>
                           <div className="text-muted small">
                             Inventario: {p.cantidad}
@@ -388,7 +425,7 @@ export default function AltasProductos() {
                   </div>
                 </div>
 
-                {/* Editar descripción, precio y estado */}
+                {/* Editar descripción, precios, código y estado */}
                 <div className="mb-2">
                   <label className="form-label mb-1">
                     Modificar descripción
@@ -403,7 +440,7 @@ export default function AltasProductos() {
 
                 <div className="mb-2">
                   <label className="form-label mb-1">
-                    Modificar precio
+                    Modificar precio venta
                   </label>
                   <div className="input-group input-group-sm">
                     <span className="input-group-text">$</span>
@@ -417,6 +454,24 @@ export default function AltasProductos() {
                     />
                   </div>
                 </div>
+
+                <div className="mb-2">
+                  <label className="form-label mb-1">
+                    Modificar costo de compra
+                  </label>
+                  <div className="input-group input-group-sm">
+                    <span className="input-group-text">$</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      className="form-control"
+                      value={precioCompraEdit}
+                      onChange={(e) => setPrecioCompraEdit(e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 <div className="mb-2">
                   <label className="form-label mb-1">Modificar código</label>
                   <input
@@ -459,7 +514,7 @@ export default function AltasProductos() {
               <div className="small text-muted">
                 Busca y selecciona un producto para registrar una nueva compra
                 de proveedor, sumar al inventario o modificar su descripción,
-                precio y estado.
+                precios y estado.
               </div>
             )}
           </div>

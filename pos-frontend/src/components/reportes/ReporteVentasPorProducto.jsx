@@ -10,12 +10,19 @@ function getInicioFinPeriodo(tipo) {
   const hoy = new Date();
   const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
   if (tipo === 'dia') {
-    const finDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59);
+    const finDia = new Date(
+      hoy.getFullYear(),
+      hoy.getMonth(),
+      hoy.getDate(),
+      23,
+      59,
+      59
+    );
     return { desde: inicioDia, hasta: finDia };
   }
   if (tipo === 'semana') {
     const day = hoy.getDay(); // 0=domingo
-    const diff = hoy.getDate() - day + (day === 0 ? -6 : 1); // lunes [web:263]
+    const diff = hoy.getDate() - day + (day === 0 ? -6 : 1); // lunes
     const inicioSemana = new Date(hoy.getFullYear(), hoy.getMonth(), diff);
     const finSemana = new Date(inicioSemana);
     finSemana.setDate(inicioSemana.getDate() + 6);
@@ -24,7 +31,14 @@ function getInicioFinPeriodo(tipo) {
   }
   if (tipo === 'mes') {
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0, 23, 59, 59);
+    const finMes = new Date(
+      hoy.getFullYear(),
+      hoy.getMonth() + 1,
+      0,
+      23,
+      59,
+      59
+    );
     return { desde: inicioMes, hasta: finMes };
   }
   return { desde: inicioDia, hasta: hoy };
@@ -37,7 +51,7 @@ export default function ReporteVentasPorProducto() {
   const [hasta, setHasta] = useState(formatoFechaInput(dFin));
   const [busqueda, setBusqueda] = useState('');
 
-  // Traer todos los VentaProducto (ajusta la URL a tu API)
+  // Traer todos los VentaProducto
   const { data: vpRaw, isLoading, error } = useQuery({
     queryKey: ['ventas-productos-reporte'],
     queryFn: async () => {
@@ -61,7 +75,7 @@ export default function ReporteVentasPorProducto() {
       return f >= dDesde && f <= dHasta;
     });
 
-    // 2) Agrupar por producto (id)
+    // 2) Agrupar por producto (id) y calcular costo y ganancia
     const mapa = new Map();
     filtrados.forEach((vp) => {
       const prod = vp.producto || {};
@@ -75,13 +89,26 @@ export default function ReporteVentasPorProducto() {
         descripcion: prod.descripcion,
         totalCantidad: 0,
         totalVentas: 0,
+        totalCosto: 0,
+        totalGanancia: 0,
+        precioVentaReferencia: prod.precio ?? 0,
+        costoCompraReferencia: prod.precioCompra ?? 0,
       };
 
-      const precio = vp.precioUnitario ?? prod.precio ?? 0;
-      const subtotal = precio * (vp.cantidad || 0);
+      const precioVenta = vp.precioUnitario ?? prod.precio ?? 0;
+      const costoCompra = prod.precioCompra ?? 0;
+      const cantidad = vp.cantidad || 0;
 
-      existente.totalCantidad += vp.cantidad || 0;
-      existente.totalVentas += subtotal;
+      const subtotalVenta = precioVenta * cantidad;
+      const subtotalCosto = costoCompra * cantidad;
+      const subtotalGanancia = subtotalVenta - subtotalCosto;
+
+      existente.totalCantidad += cantidad;
+      existente.totalVentas += subtotalVenta;
+      existente.totalCosto += subtotalCosto;
+      existente.totalGanancia += subtotalGanancia;
+      existente.precioVentaReferencia = precioVenta;
+      existente.costoCompraReferencia = costoCompra;
 
       mapa.set(clave, existente);
     });
@@ -111,6 +138,10 @@ export default function ReporteVentasPorProducto() {
   );
   const totalImporte = datosAgrupados.reduce(
     (sum, p) => sum + p.totalVentas,
+    0
+  );
+  const totalGanancia = datosAgrupados.reduce(
+    (sum, p) => sum + p.totalGanancia,
     0
   );
 
@@ -207,12 +238,19 @@ export default function ReporteVentasPorProducto() {
           {totalProductos} productos · {totalUnidades} unidades · Total:{' '}
           <span className="fw-semibold text-success">
             ${totalImporte.toFixed(2)}
+          </span>{' '}
+          · Ganancia total:{' '}
+          <span className="fw-semibold text-primary">
+            ${totalGanancia.toFixed(2)}
           </span>
         </div>
       </div>
 
       {/* Tabla */}
-      <div className="border rounded" style={{ maxHeight: 320, overflowY: 'auto' }}>
+      <div
+        className="border rounded"
+        style={{ maxHeight: 320, overflowY: 'auto' }}
+      >
         <table className="table table-sm table-hover mb-0">
           <thead className="table-light sticky-top">
             <tr>
@@ -221,31 +259,65 @@ export default function ReporteVentasPorProducto() {
               <th className="text-center" style={{ width: 90 }}>
                 Cantidad
               </th>
+              <th className="text-end" style={{ width: 100 }}>
+                P. venta
+              </th>
+              <th className="text-end" style={{ width: 110 }}>
+                Costo compra
+              </th>
+              <th className="text-end" style={{ width: 110 }}>
+                Ganancia unid.
+              </th>
               <th className="text-end" style={{ width: 120 }}>
                 Importe total
+              </th>
+              <th className="text-end" style={{ width: 120 }}>
+                Ganancia total
               </th>
             </tr>
           </thead>
           <tbody>
-            {datosAgrupados.map((p) => (
-              <tr key={p.productoId}>
-                <td>{p.productoId}</td>
-                <td className="small text-truncate" style={{ maxWidth: 260 }}>
-                  {p.descripcion}
-                  <div className="text-muted small">
-                    Código: {p.codigo}
-                  </div>
-                </td>
-                <td className="text-center">{p.totalCantidad}</td>
-                <td className="text-end fw-semibold text-success">
-                  ${p.totalVentas.toFixed(2)}
-                </td>
-              </tr>
-            ))}
+            {datosAgrupados.map((p) => {
+              const precioVenta = p.totalCantidad
+                ? p.totalVentas / p.totalCantidad
+                : p.precioVentaReferencia;
+              const costoCompra = p.totalCantidad
+                ? p.totalCosto / p.totalCantidad
+                : p.costoCompraReferencia;
+              const gananciaUnidad = precioVenta - costoCompra;
+
+              return (
+                <tr key={p.productoId}>
+                  <td>{p.productoId}</td>
+                  <td className="small text-truncate" style={{ maxWidth: 260 }}>
+                    {p.descripcion}
+                    <div className="text-muted small">
+                      Código: {p.codigo}
+                    </div>
+                  </td>
+                  <td className="text-center">{p.totalCantidad}</td>
+                  <td className="text-end">
+                    ${precioVenta.toFixed(2)}
+                  </td>
+                  <td className="text-end">
+                    ${costoCompra.toFixed(2)}
+                  </td>
+                  <td className="text-end">
+                    ${gananciaUnidad.toFixed(2)}
+                  </td>
+                  <td className="text-end fw-semibold text-success">
+                    ${p.totalVentas.toFixed(2)}
+                  </td>
+                  <td className="text-end fw-semibold text-primary">
+                    ${p.totalGanancia.toFixed(2)}
+                  </td>
+                </tr>
+              );
+            })}
 
             {datosAgrupados.length === 0 && (
               <tr>
-                <td colSpan={4} className="text-center text-muted py-3">
+                <td colSpan={8} className="text-center text-muted py-3">
                   No hay ventas en el período seleccionado.
                 </td>
               </tr>

@@ -10,7 +10,14 @@ function getInicioFinPeriodo(tipo) {
   const hoy = new Date();
   const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
   if (tipo === 'dia') {
-    const finDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59);
+    const finDia = new Date(
+      hoy.getFullYear(),
+      hoy.getMonth(),
+      hoy.getDate(),
+      23,
+      59,
+      59
+    );
     return { desde: inicioDia, hasta: finDia };
   }
   if (tipo === 'semana') {
@@ -24,7 +31,14 @@ function getInicioFinPeriodo(tipo) {
   }
   if (tipo === 'mes') {
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0, 23, 59, 59);
+    const finMes = new Date(
+      hoy.getFullYear(),
+      hoy.getMonth() + 1,
+      0,
+      23,
+      59,
+      59
+    );
     return { desde: inicioMes, hasta: finMes };
   }
   return { desde: inicioDia, hasta: hoy };
@@ -38,7 +52,7 @@ export default function ReporteVentasGenerales() {
   const [busqueda, setBusqueda] = useState('');
   const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
 
-  // Traer todas las ventas (incluyendo productos si tu API ya los expone)
+  // Traer todas las ventas
   const { data: ventasRaw, isLoading, error } = useQuery({
     queryKey: ['ventas-reporte-generales'],
     queryFn: async () => {
@@ -88,6 +102,17 @@ export default function ReporteVentasGenerales() {
   const totalPrestamos = ventasFiltradas
     .filter((v) => v.status === 'PRESTAMO')
     .reduce((sum, v) => sum + (v.total || 0), 0);
+
+  // Ganancia total en el período (suma de todas las ventas filtradas)
+  const gananciaTotalGeneral = ventasFiltradas.reduce((acum, v) => {
+    const gananciaVenta = (v.ventaProductos || []).reduce((s, vp) => {
+      const precioVenta = vp.precioUnitario ?? vp.precio ?? 0;
+      const costoCompra = vp.producto?.precioCompra ?? 0;
+      const gananciaUnidad = precioVenta - costoCompra;
+      return s + (vp.cantidad || 0) * gananciaUnidad;
+    }, 0);
+    return acum + gananciaVenta;
+  }, 0);
 
   const aplicarPeriodo = (nuevoTipo) => {
     setTipoPeriodo(nuevoTipo);
@@ -190,6 +215,10 @@ export default function ReporteVentasGenerales() {
           · Préstamos:{' '}
           <span className="fw-semibold text-warning">
             ${totalPrestamos.toFixed(2)}
+          </span>{' '}
+          · Ganancia total:{' '}
+          <span className="fw-semibold text-primary">
+            ${gananciaTotalGeneral.toFixed(2)}
           </span>
         </div>
       </div>
@@ -197,7 +226,10 @@ export default function ReporteVentasGenerales() {
       <div className="row">
         {/* Tabla de ventas */}
         <div className="col-md-7">
-          <div className="border rounded" style={{ maxHeight: 320, overflowY: 'auto' }}>
+          <div
+            className="border rounded"
+            style={{ maxHeight: 320, overflowY: 'auto' }}
+          >
             <table className="table table-sm table-hover mb-0">
               <thead className="table-light sticky-top">
                 <tr>
@@ -218,7 +250,9 @@ export default function ReporteVentasGenerales() {
                     key={v.id}
                     onClick={() => handleClickVenta(v)}
                     style={{ cursor: 'pointer' }}
-                    className={ventaSeleccionada?.id === v.id ? 'table-active' : ''}
+                    className={
+                      ventaSeleccionada?.id === v.id ? 'table-active' : ''
+                    }
                   >
                     <td>{v.id}</td>
                     <td className="small">
@@ -237,7 +271,7 @@ export default function ReporteVentasGenerales() {
                       ${v.total?.toFixed(2)}
                     </td>
                     <td className="text-center">
-                                            <span
+                      <span
                         className={
                           v.status === 'PRESTAMO'
                             ? 'badge bg-warning text-dark'
@@ -280,24 +314,37 @@ export default function ReporteVentasGenerales() {
                 </div>
                 <div>
                   <strong>Fecha:</strong>{' '}
-                  {ventaSeleccionada.fecha?.replace('T', ' ').substring(0, 19)}
+                  {ventaSeleccionada.fecha
+                    ?.replace('T', ' ')
+                    .substring(0, 19)}
                 </div>
                 <div>
                   <strong>Tipo:</strong>{' '}
-                  {ventaSeleccionada.status === 'PRESTAMO' ? 'Préstamo' : 'Contado'}
+                  {ventaSeleccionada.status === 'PRESTAMO'
+                    ? 'Préstamo'
+                    : 'Contado'}
                 </div>
               </div>
 
-              <div className="border rounded" style={{ maxHeight: 260, overflowY: 'auto' }}>
+              <div
+                className="border rounded"
+                style={{ maxHeight: 260, overflowY: 'auto' }}
+              >
                 <table className="table table-sm mb-0">
                   <thead className="table-light sticky-top">
                     <tr>
                       <th>Producto</th>
-                      <th className="text-center" style={{ width: 80 }}>
+                      <th className="text-center" style={{ width: 70 }}>
                         Cant.
                       </th>
                       <th className="text-end" style={{ width: 90 }}>
-                        P. unit.
+                        P. venta
+                      </th>
+                      <th className="text-end" style={{ width: 90 }}>
+                        Costo compra
+                      </th>
+                      <th className="text-end" style={{ width: 90 }}>
+                        Ganancia
                       </th>
                       <th className="text-end" style={{ width: 100 }}>
                         Importe
@@ -305,32 +352,45 @@ export default function ReporteVentasGenerales() {
                     </tr>
                   </thead>
                   <tbody>
-                    {ventaSeleccionada.ventaProductos?.map((vp) => (
-                      <tr key={vp.id}>
-                        <td className="small">
-                          {vp.producto?.descripcion || `Producto ${vp.producto?.id}`}
-                          <div className="text-muted">
-                            Código: {vp.producto?.codigo}
-                          </div>
-                        </td>
-                        <td className="text-center">{vp.cantidad}</td>
-                        <td className="text-end">
-                          ${Number(vp.precioUnitario ?? vp.precio ?? 0).toFixed(2)}
-                        </td>
-                        <td className="text-end fw-semibold">
-                          $
-                          {(
-                            (vp.cantidad || 0) *
-                            (vp.precioUnitario ?? vp.precio ?? 0)
-                          ).toFixed(2)}
-                        </td>
-                      </tr>
-                    ))}
+                    {ventaSeleccionada.ventaProductos?.map((vp) => {
+                      const precioVenta =
+                        vp.precioUnitario ?? vp.precio ?? 0;
+                      const costoCompra =
+                        vp.producto?.precioCompra ?? 0;
+                      const gananciaUnidad =
+                        precioVenta - costoCompra;
+                      const importe =
+                        (vp.cantidad || 0) * precioVenta;
+                      return (
+                        <tr key={vp.id}>
+                          <td className="small">
+                            {vp.producto?.descripcion ||
+                              `Producto ${vp.producto?.id}`}
+                            <div className="text-muted">
+                              Código: {vp.producto?.codigo}
+                            </div>
+                          </td>
+                          <td className="text-center">{vp.cantidad}</td>
+                          <td className="text-end">
+                            ${precioVenta.toFixed(2)}
+                          </td>
+                          <td className="text-end">
+                            ${costoCompra.toFixed(2)}
+                          </td>
+                          <td className="text-end">
+                            ${gananciaUnidad.toFixed(2)}
+                          </td>
+                          <td className="text-end fw-semibold">
+                            ${importe.toFixed(2)}
+                          </td>
+                        </tr>
+                      );
+                    })}
 
                     {(!ventaSeleccionada.ventaProductos ||
                       ventaSeleccionada.ventaProductos.length === 0) && (
                       <tr>
-                        <td colSpan={4} className="text-center text-muted py-3">
+                        <td colSpan={6} className="text-center text-muted py-3">
                           Esta venta no tiene productos asociados.
                         </td>
                       </tr>

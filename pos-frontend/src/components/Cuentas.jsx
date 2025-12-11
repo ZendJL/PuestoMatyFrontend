@@ -1,12 +1,7 @@
 import { useState, useMemo } from 'react';
 import axios from 'axios';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-
-// Formato de dinero
-const formatMoney = (value) => {
-  if (!value && value !== 0) return '$0.00';
-  return `$${Number(value).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
-};
+import { formatMoney, formatFecha } from '../utils/format.js';
 
 const estadoInicial = {
   nombre: '',
@@ -28,6 +23,12 @@ export default function Cuentas() {
   const [descripcionEdit, setDescripcionEdit] = useState('');
   const [mostrarEdicionCliente, setMostrarEdicionCliente] = useState(false);
 
+  // sort tabla cuentas
+  const [sortConfig, setSortConfig] = useState({
+    key: 'saldo',
+    direction: 'desc',
+  });
+
   const queryClient = useQueryClient();
 
   // Cargar cuentas
@@ -43,16 +44,34 @@ export default function Cuentas() {
 
   const cuentasFiltradas = useMemo(() => {
     const q = busqueda.toLowerCase();
-    return cuentas
-      .filter((c) =>
-        q
-          ? String(c.id).includes(q) ||
-            c.nombre?.toLowerCase().includes(q) ||
-            c.descripcion?.toLowerCase().includes(q)
-          : true
-      )
-      .sort((a, b) => (b.saldo || 0) - (a.saldo || 0));
-  }, [cuentas, busqueda]);
+    let lista = cuentas.filter((c) =>
+      q
+        ? String(c.id).includes(q) ||
+          c.nombre?.toLowerCase().includes(q) ||
+          c.descripcion?.toLowerCase().includes(q)
+        : true
+    );
+
+    // ordenamiento
+    if (sortConfig.key) {
+      const { key, direction } = sortConfig;
+      lista = [...lista].sort((a, b) => {
+        let vA = a[key] ?? 0;
+        let vB = b[key] ?? 0;
+
+        if (typeof vA === 'string') vA = vA.toLowerCase();
+        if (typeof vB === 'string') vB = vB.toLowerCase();
+
+        let comp = 0;
+        if (vA < vB) comp = -1;
+        if (vA > vB) comp = 1;
+
+        return direction === 'asc' ? comp : -comp;
+      });
+    }
+
+    return lista;
+  }, [cuentas, busqueda, sortConfig]);
 
   const totalDeuda = cuentasFiltradas.reduce(
     (sum, c) => sum + (c.saldo || 0),
@@ -92,6 +111,32 @@ export default function Cuentas() {
       .filter((v) => (v.cuenta?.id ?? v.cuentaId) === cuentaSeleccionada.id)
       .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
   }, [ventas, cuentaSeleccionada]);
+
+  // sort handler
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return {
+        key,
+        direction: key === 'nombre' || key === 'descripcion' ? 'asc' : 'desc',
+      };
+    });
+  };
+
+  const renderSortIcon = (key) => {
+    if (sortConfig.key !== key)
+      return <span className="text-body-primary ms-1">↕</span>;
+    return (
+      <span className="ms-1">
+        {sortConfig.direction === 'asc' ? '▲' : '▼'}
+      </span>
+    );
+  };
 
   // Alta de cuenta
   const handleChange = (e) => {
@@ -216,17 +261,20 @@ export default function Cuentas() {
     setMontoAbono('');
   };
 
-  if (isLoading) return <div>Cargando cuentas...</div>;
-  if (error) return <div className="text-danger">Error al cargar cuentas</div>;
+  if (isLoading) return <div className="fs-6">Cargando cuentas...</div>;
+  if (error)
+    return (
+      <div className="text-danger fs-6">Error al cargar cuentas</div>
+    );
 
   const cuentasConDeuda = cuentas.filter((c) => (c.saldo || 0) > 0).length;
 
   return (
     <div className="d-flex justify-content-center">
       <div
-        className="card shadow-sm w-100"
+        className="card shadow-sm w-100 fs-6"
         style={{
-          maxWidth: 'calc(100vw - 100px)', // 50px por lado
+          maxWidth: 'calc(100vw - 100px)',
           marginTop: '1.5rem',
           marginBottom: '2rem',
         }}
@@ -235,11 +283,11 @@ export default function Cuentas() {
         <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
           <div>
             <h5 className="mb-0">Cuentas de clientes</h5>
-            <small className="text-white-100">
+            <small className="text-white-50">
               Administra cuentas por cobrar y registra abonos
             </small>
           </div>
-          <div className="text-end big">
+          <div className="text-end">
             <div>
               Cuentas: <strong>{cuentas.length}</strong>
             </div>
@@ -247,14 +295,13 @@ export default function Cuentas() {
               Con deuda:{' '}
               <strong className="text-warning">{cuentasConDeuda}</strong>
             </div>
-            <div className="text-warning">
-              Total adeudado:{' '}
-              <strong>{formatMoney(totalDeuda)}</strong>
+            <div className="text-warning fw-semibold">
+              Total adeudado: {formatMoney(totalDeuda)}
             </div>
           </div>
         </div>
 
-        <div className="card-body py-3">
+        <div className="card-body py-3 bg-body">
           <div className="row g-3">
             {/* Alta de cuenta */}
             <div className="col-lg-5 border-end">
@@ -331,7 +378,7 @@ export default function Cuentas() {
             <div className="col-lg-7">
               {/* Lista de cuentas */}
               <div className="card shadow-sm mb-3">
-        <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
+                <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
                   <h6 className="mb-0">Cuentas y saldos</h6>
                   <button
                     type="button"
@@ -342,7 +389,7 @@ export default function Cuentas() {
                     Quitar selección
                   </button>
                 </div>
-                <div className="card-body py-2">
+                <div className="card-body py-2 bg-body">
                   <div className="row g-2 align-items-end mb-2">
                     <div className="col-md-7">
                       <label className="form-label mb-1">Buscar cuenta</label>
@@ -354,7 +401,7 @@ export default function Cuentas() {
                         onChange={(e) => setBusqueda(e.target.value)}
                       />
                     </div>
-                    <div className="col small text-body-secondary">
+                    <div className="col small text-body-primary">
                       {cuentasFiltradas.length} cuentas listadas · Deuda en
                       vista:{' '}
                       <span className="fw-semibold text-danger">
@@ -367,15 +414,38 @@ export default function Cuentas() {
                     className="border rounded small bg-body"
                     style={{ maxHeight: 210, overflowY: 'auto' }}
                   >
-                    <table className="table table-sm table-hover mb-0 align-middle">
+                    <table className="table table-sm table-hover table-striped mb-0 align-middle">
                       <thead className="sticky-top">
                         <tr>
-                          <th style={{ width: 60 }}>ID</th>
-                          <th>Cliente</th>
-                          <th className="text-end" style={{ width: 110 }}>
-                            Saldo
+                          <th
+                            style={{ width: 60, cursor: 'pointer' }}
+                            onClick={() => handleSort('id')}
+                          >
+                            ID
+                            {renderSortIcon('id')}
                           </th>
-                          <th>Notas</th>
+                          <th
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => handleSort('nombre')}
+                          >
+                            Cliente
+                            {renderSortIcon('nombre')}
+                          </th>
+                          <th
+                            className="text-end"
+                            style={{ width: 110, cursor: 'pointer' }}
+                            onClick={() => handleSort('saldo')}
+                          >
+                            Saldo
+                            {renderSortIcon('saldo')}
+                          </th>
+                          <th
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => handleSort('descripcion')}
+                          >
+                            Notas
+                            {renderSortIcon('descripcion')}
+                          </th>
                         </tr>
                       </thead>
                       <tbody>
@@ -412,7 +482,7 @@ export default function Cuentas() {
                               </span>
                             </td>
                             <td
-                              className="small text-truncate"
+                              className="small text-truncate text-body-primary"
                               style={{ maxWidth: 220 }}
                             >
                               {c.descripcion}
@@ -424,7 +494,7 @@ export default function Cuentas() {
                           <tr>
                             <td
                               colSpan={4}
-                              className="text-center text-body-secondary py-3"
+                              className="text-center text-body-primary py-3"
                             >
                               No hay cuentas que coincidan con la búsqueda.
                             </td>
@@ -435,6 +505,7 @@ export default function Cuentas() {
                   </div>
                 </div>
               </div>
+
               {/* Toggle de edición de datos del cliente */}
               <div className="form-check form-switch mb-2">
                 <input
@@ -455,11 +526,10 @@ export default function Cuentas() {
               {/* Panel de edición de datos del cliente */}
               {mostrarEdicionCliente && (
                 <div className="card shadow-sm mb-3">
-                  
-        <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
+                  <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
                     <h6 className="mb-0">Editar datos del cliente</h6>
                   </div>
-                  <div className="card-body py-2">
+                  <div className="card-body py-2 bg-body">
                     {cuentaSeleccionada ? (
                       <>
                         <div className="mb-2">
@@ -502,7 +572,7 @@ export default function Cuentas() {
                         </div>
                       </>
                     ) : (
-                      <div className="small text-body-secondary">
+                      <div className="small text-body-primary">
                         Selecciona una cuenta de la tabla para editar nombre y
                         notas.
                       </div>
@@ -513,14 +583,13 @@ export default function Cuentas() {
 
               {/* Panel de abono */}
               <div className="card shadow-sm mb-3">
-                
-        <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
+                <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
                   <h6 className="mb-0">Registrar abono</h6>
                 </div>
-                <div className="card-body py-2">
+                <div className="card-body py-2 bg-body">
                   {cuentaSeleccionada ? (
                     <>
-                      <div className="small mb-2">
+                      <div className="small mb-2 text-body-primary">
                         <div>
                           <strong>Cuenta:</strong> {cuentaSeleccionada.nombre}{' '}
                           (ID {cuentaSeleccionada.id})
@@ -550,7 +619,7 @@ export default function Cuentas() {
                             />
                           </div>
                         </div>
-                        <div className="col-md-4 small">
+                        <div className="col-md-4 small text-body-primary">
                           <div className="mb-1">
                             <strong>Saldo después del abono:</strong>{' '}
                             {montoAbono
@@ -577,7 +646,7 @@ export default function Cuentas() {
                       </div>
                     </>
                   ) : (
-                    <div className="small text-body-secondary">
+                    <div className="small text-body-primary">
                       Selecciona una cuenta de la tabla para registrar un abono.
                     </div>
                   )}
@@ -586,13 +655,12 @@ export default function Cuentas() {
 
               {/* Historial de cuenta seleccionada */}
               <div className="card shadow-sm">
-                
-        <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
+                <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
                   <h6 className="mb-0">Historial de movimientos</h6>
                 </div>
-                <div className="card-body py-2">
+                <div className="card-body py-2 bg-body">
                   {!cuentaSeleccionada && (
-                    <div className="small text-body-secondary">
+                    <div className="small text-body-primary">
                       Selecciona una cuenta para ver sus abonos y ventas a
                       crédito.
                     </div>
@@ -600,7 +668,7 @@ export default function Cuentas() {
 
                   {cuentaSeleccionada && (
                     <>
-                      <div className="small mb-2">
+                      <div className="small mb-2 text-body-primary">
                         <strong>Cuenta:</strong> {cuentaSeleccionada.nombre} (ID{' '}
                         {cuentaSeleccionada.id}) ·{' '}
                         <strong>Saldo actual:</strong>{' '}
@@ -616,7 +684,7 @@ export default function Cuentas() {
                           className="border rounded bg-body"
                           style={{ maxHeight: 130, overflowY: 'auto' }}
                         >
-                          <table className="table table-sm mb-0">
+                          <table className="table table-sm table-striped mb-0 align-middle fs-6">
                             <thead className="sticky-top">
                               <tr>
                                 <th style={{ width: 160 }}>Fecha</th>
@@ -634,10 +702,8 @@ export default function Cuentas() {
                             <tbody>
                               {abonosDeCuenta.map((a) => (
                                 <tr key={a.id}>
-                                  <td className="small">
-                                    {a.fecha
-                                      ?.replace('T', ' ')
-                                      .substring(0, 19)}
+                                  <td className="small text-body-primary">
+                                    {formatFecha(a.fecha)}
                                   </td>
                                   <td className="text-end text-success">
                                     {formatMoney(a.cantidad || 0)}
@@ -655,7 +721,7 @@ export default function Cuentas() {
                                 <tr>
                                   <td
                                     colSpan={4}
-                                    className="text-center text-body-secondary py-2 small"
+                                    className="text-center text-body-primary py-2 small"
                                   >
                                     Sin abonos registrados para esta cuenta.
                                   </td>
@@ -673,7 +739,7 @@ export default function Cuentas() {
                           className="border rounded bg-body"
                           style={{ maxHeight: 130, overflowY: 'auto' }}
                         >
-                          <table className="table table-sm mb-0">
+                          <table className="table table-sm table-striped mb-0 align-middle fs-6">
                             <thead className="sticky-top">
                               <tr>
                                 <th style={{ width: 70 }}>Venta</th>
@@ -690,16 +756,18 @@ export default function Cuentas() {
                             <tbody>
                               {ventasDeCuenta.map((v) => (
                                 <tr key={v.id}>
-                                  <td>{v.id}</td>
-                                  <td className="small">
-                                    {v.fecha
-                                      ?.replace('T', ' ')
-                                      .substring(0, 19)}
+                                  <td className="small text-body-primary">
+                                    {v.id}
+                                  </td>
+                                  <td className="small text-body-primary">
+                                    {formatFecha(v.fecha)}
                                   </td>
                                   <td className="text-end fw-semibold">
                                     {formatMoney(v.total || 0)}
                                   </td>
-                                  <td className="small">{v.status}</td>
+                                  <td className="small text-body-primary">
+                                    {v.status}
+                                  </td>
                                 </tr>
                               ))}
 
@@ -707,7 +775,7 @@ export default function Cuentas() {
                                 <tr>
                                   <td
                                     colSpan={4}
-                                    className="text-center text-body-secondary py-2 small"
+                                    className="text-center text-body-primary py-2 small"
                                   >
                                     Sin ventas asociadas a esta cuenta.
                                   </td>

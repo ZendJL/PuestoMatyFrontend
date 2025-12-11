@@ -2,11 +2,19 @@ import { useState } from 'react';
 import axios from 'axios';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
+// Formato de dinero
+const formatMoney = (value) => {
+  if (!value && value !== 0) return '$0.00';
+  return `$${Number(value)
+    .toFixed(2)
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+};
+
 const estadoInicial = {
   codigo: '',
   descripcion: '',
   precio: '',
-  precioCompra: '',      // costo de compra
+  precioCompra: '',
   proveedor: '',
   cantidad: '',
 };
@@ -15,19 +23,17 @@ export default function AltasProductos() {
   const [form, setForm] = useState(estadoInicial);
   const [guardando, setGuardando] = useState(false);
 
-  // Estado para agregar / editar producto existente
   const [busquedaProducto, setBusquedaProducto] = useState('');
   const [productoSeleccionado, setProductoSeleccionado] = useState(null);
   const [cantidadAgregar, setCantidadAgregar] = useState('');
   const [descripcionEdit, setDescripcionEdit] = useState('');
   const [precioEdit, setPrecioEdit] = useState('');
-  const [precioCompraEdit, setPrecioCompraEdit] = useState(''); // costo de compra
+  const [precioCompraEdit, setPrecioCompraEdit] = useState('');
   const [activoEdit, setActivoEdit] = useState(true);
   const [codigoEdit, setCodigoEdit] = useState('');
 
   const queryClient = useQueryClient();
 
-  // Cargar productos para el buscador
   const { data: productosRaw } = useQuery({
     queryKey: ['productos-altas'],
     queryFn: async () => {
@@ -39,8 +45,8 @@ export default function AltasProductos() {
   const productos = Array.isArray(productosRaw)
     ? productosRaw
     : Array.isArray(productosRaw?.content)
-      ? productosRaw.content
-      : [];
+    ? productosRaw.content
+    : [];
 
   const productosFiltrados = productos
     .filter((p) => {
@@ -108,7 +114,7 @@ export default function AltasProductos() {
         { params: { cantidad: cant } }
       );
       alert(
-        `✅ Se agregaron ${cant} unidades. Nuevo Inventario: ${res.data.cantidad}`
+        `✅ Se agregaron ${cant} unidades. Nuevo inventario: ${res.data.cantidad}`
       );
       setProductoSeleccionado(res.data);
       setCantidadAgregar('');
@@ -116,7 +122,7 @@ export default function AltasProductos() {
       queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
     } catch (err) {
       console.error(err);
-      alert('❌ Error al agregar Inventario');
+      alert('❌ Error al agregar inventario');
     }
   };
 
@@ -161,10 +167,7 @@ export default function AltasProductos() {
         activo: activoEdit,
       };
 
-      const res = await axios.put(
-        `/api/productos/${productoSeleccionado.id}`,
-        body
-      );
+      await axios.put(`/api/productos/${productoSeleccionado.id}`, body);
 
       alert('✅ Producto actualizado correctamente');
 
@@ -185,338 +188,378 @@ export default function AltasProductos() {
     }
   };
 
+  const totalProductos = productos.length;
+  const productosActivos = productos.filter((p) => p.activo !== false).length;
+
   return (
-    <div className="row g-3">
-      {/* Alta de producto nuevo */}
-      <div className="col-md-6">
-        <div className="card shadow-sm">
-          <div className="card-header py-2">
-            <h5 className="mb-0">Alta de producto</h5>
+    <div className="d-flex justify-content-center">
+      <div
+        className="card shadow-sm w-100"
+        style={{
+          maxWidth: 'calc(100vw - 100px)', // 50px de margen lateral
+          marginTop: '1.5rem',
+          marginBottom: '2rem',
+        }}
+      >
+        {/* Header azul */}
+        <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
+          <div>
+            <h5 className="mb-0">Gestión de productos</h5>
+            <small className="text-white-80">
+              Da de alta nuevos productos y ajusta inventario existente
+            </small>
           </div>
-          <div className="card-body py-3">
-            <form onSubmit={handleSubmit} className="row g-3">
-              <div className="col-md-4">
-                <label className="form-label mb-1">Código de barras</label>
-                <input
-                  type="text"
-                  name="codigo"
-                  className="form-control form-control-sm"
-                  value={form.codigo}
-                  onChange={handleChange}
-                  placeholder="Escanear o escribir código"
-                  autoFocus
-                  required
-                />
-              </div>
+          <div className="text-end big">
+            <div>
+              Total: <strong>{totalProductos}</strong>
+            </div>
+            <div className="text-warning">
+              Activos: <strong>{productosActivos}</strong>
+            </div>
+          </div>
+        </div>
 
-              <div className="col-md-8">
-                <label className="form-label mb-1">Descripción</label>
-                <input
-                  type="text"
-                  name="descripcion"
-                  className="form-control form-control-sm"
-                  value={form.descripcion}
-                  onChange={handleChange}
-                  placeholder="Nombre del producto"
-                  required
-                />
-              </div>
+        <div className="card-body py-3">
+          <div className="row g-3">
+            {/* Columna izquierda: alta de producto */}
+            <div className="col-md-6 border-end">
+              <h6 className="mb-2">Alta de producto nuevo</h6>
+              <form onSubmit={handleSubmit} className="row g-3">
+                <div className="col-md-5">
+                  <label className="form-label mb-1">Código de barras</label>
+                  <input
+                    type="text"
+                    name="codigo"
+                    className="form-control form-control-sm"
+                    value={form.codigo}
+                    onChange={handleChange}
+                    placeholder="Escanear o escribir código"
+                    autoFocus
+                    required
+                  />
+                </div>
 
-              <div className="col-md-4">
-                <label className="form-label mb-1">Precio venta</label>
-                <div className="input-group input-group-sm">
-                  <span className="input-group-text">$</span>
+                <div className="col-md-7">
+                  <label className="form-label mb-1">Descripción</label>
+                  <input
+                    type="text"
+                    name="descripcion"
+                    className="form-control form-control-sm"
+                    value={form.descripcion}
+                    onChange={handleChange}
+                    placeholder="Nombre del producto"
+                    required
+                  />
+                </div>
+
+                <div className="col-md-4">
+                  <label className="form-label mb-1">Precio venta</label>
+                  <div className="input-group input-group-sm">
+                    <span className="input-group-text">$</span>
+                    <input
+                      type="number"
+                      name="precio"
+                      className="form-control"
+                      step="0.01"
+                      min="0"
+                      value={form.precio}
+                      onChange={handleChange}
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="col-md-4">
+                  <label className="form-label mb-1">Costo de compra</label>
+                  <div className="input-group input-group-sm">
+                    <span className="input-group-text">$</span>
+                    <input
+                      type="number"
+                      name="precioCompra"
+                      className="form-control"
+                      step="0.01"
+                      min="0"
+                      value={form.precioCompra}
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <small className="text-body-secondary">
+                    Opcional. Útil para margen de ganancia.
+                  </small>
+                </div>
+
+                <div className="col-md-4">
+                  <label className="form-label mb-1">Inventario inicial</label>
                   <input
                     type="number"
-                    name="precio"
-                    className="form-control"
-                    step="0.01"
+                    name="cantidad"
+                    className="form-control form-control-sm"
                     min="0"
-                    value={form.precio}
+                    value={form.cantidad}
                     onChange={handleChange}
                     required
                   />
                 </div>
-              </div>
 
-              <div className="col-md-4">
-                <label className="form-label mb-1">Costo de compra</label>
-                <div className="input-group input-group-sm">
-                  <span className="input-group-text">$</span>
+                <div className="col-md-6">
+                  <label className="form-label mb-1">Proveedor</label>
                   <input
-                    type="number"
-                    name="precioCompra"
-                    className="form-control"
-                    step="0.01"
-                    min="0"
-                    value={form.precioCompra}
+                    type="text"
+                    name="proveedor"
+                    className="form-control form-control-sm"
+                    value={form.proveedor}
                     onChange={handleChange}
-                  />
-                </div>
-              </div>
-
-              <div className="col-md-4">
-                <label className="form-label mb-1">Cantidad en inventario</label>
-                <input
-                  type="number"
-                  name="cantidad"
-                  className="form-control form-control-sm"
-                  min="0"
-                  value={form.cantidad}
-                  onChange={handleChange}
-                  required
-                />
-              </div>
-
-              <div className="col-md-4">
-                <label className="form-label mb-1">Proveedor</label>
-                <input
-                  type="text"
-                  name="proveedor"
-                  className="form-control form-control-sm"
-                  value={form.proveedor}
-                  onChange={handleChange}
-                  placeholder="Opcional"
-                />
-              </div>
-
-              <div className="col-12 d-flex justify-content-end gap-2 mt-2">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-secondary"
-                  onClick={() => setForm(estadoInicial)}
-                  disabled={guardando}
-                >
-                  Limpiar
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-sm btn-primary"
-                  disabled={guardando}
-                >
-                  {guardando ? 'Guardando...' : 'Guardar producto'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      </div>
-
-      {/* Buscar producto, agregar stock y modificar */}
-      <div className="col-md-6">
-        <div className="card shadow-sm">
-          <div className="card-header py-2">
-            <h5 className="mb-0">
-              Inventario y edición de producto existente
-            </h5>
-          </div>
-          <div className="card-body py-3">
-            <div className="mb-2">
-              <label className="form-label mb-1">
-                Buscar producto (código o descripción)
-              </label>
-              <input
-                type="text"
-                className="form-control form-control-sm"
-                placeholder="Escribe o escanea el código..."
-                value={busquedaProducto}
-                onChange={(e) => setBusquedaProducto(e.target.value)}
-              />
-            </div>
-
-            {busquedaProducto && productosFiltrados.length > 0 && (
-              <div
-                className="mb-3 border rounded small"
-                style={{ maxHeight: 180, overflowY: 'auto' }}
-              >
-                <table className="table table-hover table-sm mb-0">
-                  <tbody>
-                    {productosFiltrados.map((p) => (
-                      <tr
-                        key={p.id}
-                        style={{ cursor: 'pointer' }}
-                        className={
-                          productoSeleccionado?.id === p.id
-                            ? 'table-primary'
-                            : ''
-                        }
-                        onClick={() => {
-                          setProductoSeleccionado(p);
-                          setBusquedaProducto(p.descripcion);
-                          setDescripcionEdit(p.descripcion || '');
-                          setPrecioEdit(
-                            p.precio != null ? String(p.precio) : ''
-                          );
-                          setPrecioCompraEdit(
-                            p.precioCompra != null
-                              ? String(p.precioCompra)
-                              : ''
-                          );
-                          setActivoEdit(p.activo == null ? true : p.activo);
-                          setCodigoEdit(p.codigo || '');
-                        }}
-                      >
-                        <td className="text-truncate" style={{ maxWidth: 240 }}>
-                          <div className="fw-semibold">{p.descripcion}</div>
-                          <div className="text-muted small">
-                            Código: {p.codigo}
-                          </div>
-                        </td>
-                        <td className="text-end align-middle">
-                          <div className="fw-semibold text-success">
-                            ${p.precio}
-                          </div>
-                          <div className="text-muted small">
-                            Costo compra: {p.precioCompra ?? '-'}
-                          </div>
-                          <div className="text-muted small">
-                            Inventario: {p.cantidad}
-                          </div>
-                          <div className="text-muted small">
-                            Estado:{' '}
-                            {p.activo === false ? 'Desactivo' : 'Activo'}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-
-            {productoSeleccionado && (
-              <>
-                <div className="mb-2 small">
-                  <div>
-                    <strong>Seleccionado:</strong>{' '}
-                    {productoSeleccionado.descripcion} (
-                    {productoSeleccionado.codigo})
-                  </div>
-                  <div>
-                    <strong>Stock actual:</strong>{' '}
-                    {productoSeleccionado.cantidad}
-                  </div>
-                </div>
-
-                {/* Agregar stock */}
-                <div className="mb-3">
-                  <label className="form-label mb-1">
-                    Agregar unidades al stock
-                  </label>
-                  <div className="input-group input-group-sm">
-                    <input
-                      type="number"
-                      min="1"
-                      className="form-control form-control-sm"
-                      value={cantidadAgregar}
-                      onChange={(e) => setCantidadAgregar(e.target.value)}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-outline-primary btn-sm"
-                      onClick={agregarStock}
-                    >
-                      Agregar
-                    </button>
-                  </div>
-                  <div className="form-text">
-                    Ejemplo: si tenías 10 y agregas 20, el inventario quedará en
-                    30.
-                  </div>
-                </div>
-
-                {/* Editar descripción, precios, código y estado */}
-                <div className="mb-2">
-                  <label className="form-label mb-1">
-                    Modificar descripción
-                  </label>
-                  <input
-                    type="text"
-                    className="form-control form-control-sm"
-                    value={descripcionEdit}
-                    onChange={(e) => setDescripcionEdit(e.target.value)}
+                    placeholder="Opcional"
                   />
                 </div>
 
-                <div className="mb-2">
-                  <label className="form-label mb-1">
-                    Modificar precio venta
-                  </label>
-                  <div className="input-group input-group-sm">
-                    <span className="input-group-text">$</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="form-control"
-                      value={precioEdit}
-                      onChange={(e) => setPrecioEdit(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="mb-2">
-                  <label className="form-label mb-1">
-                    Modificar costo de compra
-                  </label>
-                  <div className="input-group input-group-sm">
-                    <span className="input-group-text">$</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="form-control"
-                      value={precioCompraEdit}
-                      onChange={(e) => setPrecioCompraEdit(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="mb-2">
-                  <label className="form-label mb-1">Modificar código</label>
-                  <input
-                    type="text"
-                    className="form-control form-control-sm"
-                    value={codigoEdit}
-                    onChange={(e) => setCodigoEdit(e.target.value)}
-                  />
-                </div>
-
-                <div className="mb-3 form-check">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    id="activoEdit"
-                    checked={activoEdit}
-                    onChange={(e) => setActivoEdit(e.target.checked)}
-                  />
-                  <label
-                    className="form-check-label small"
-                    htmlFor="activoEdit"
-                  >
-                    Producto activo (visible y vendible)
-                  </label>
-                </div>
-
-                <div className="d-flex justify-content-end">
+                <div className="col-12 d-flex justify-content-end gap-2 mt-2">
                   <button
                     type="button"
-                    className="btn btn-sm btn-warning"
-                    onClick={guardarCambiosProducto}
+                    className="btn btn-sm btn-outline-secondary"
+                    onClick={() => setForm(estadoInicial)}
+                    disabled={guardando}
                   >
-                    Guardar cambios de producto
+                    Limpiar
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-sm btn-success"
+                    disabled={guardando}
+                  >
+                    {guardando ? 'Guardando...' : 'Guardar producto'}
                   </button>
                 </div>
-              </>
-            )}
+              </form>
+            </div>
 
-            {!productoSeleccionado && (
-              <div className="small text-muted">
-                Busca y selecciona un producto para registrar una nueva compra
-                de proveedor, sumar al inventario o modificar su descripción,
-                precios y estado.
+            {/* Columna derecha: búsqueda, stock y edición */}
+            <div className="col-md-6">
+              <h6 className="mb-2">Inventario y edición</h6>
+
+              {/* Buscador */}
+              <div className="mb-2">
+                <label className="form-label mb-1">
+                  Buscar producto (código o descripción)
+                </label>
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  placeholder="Escribe o escanea el código..."
+                  value={busquedaProducto}
+                  onChange={(e) => setBusquedaProducto(e.target.value)}
+                />
               </div>
-            )}
+
+              {/* Resultados de búsqueda */}
+              {busquedaProducto && productosFiltrados.length > 0 && (
+                <div
+                  className="mb-3 border rounded small bg-body"
+                  style={{ maxHeight: 180, overflowY: 'auto' }}
+                >
+                  <table className="table table-hover table-sm mb-0">
+                    <tbody>
+                      {productosFiltrados.map((p) => (
+                        <tr
+                          key={p.id}
+                          style={{ cursor: 'pointer' }}
+                          className={
+                            productoSeleccionado?.id === p.id
+                              ? 'table-primary'
+                              : ''
+                          }
+                          onClick={() => {
+                            setProductoSeleccionado(p);
+                            setBusquedaProducto(p.descripcion);
+                            setDescripcionEdit(p.descripcion || '');
+                            setPrecioEdit(
+                              p.precio != null ? String(p.precio) : ''
+                            );
+                            setPrecioCompraEdit(
+                              p.precioCompra != null
+                                ? String(p.precioCompra)
+                                : ''
+                            );
+                            setActivoEdit(
+                              p.activo == null ? true : p.activo
+                            );
+                            setCodigoEdit(p.codigo || '');
+                          }}
+                        >
+                          <td
+                            className="text-truncate"
+                            style={{ maxWidth: 240 }}
+                          >
+                            <div className="fw-semibold">
+                              {p.descripcion}
+                            </div>
+                            <div className="text-body-primary small">
+                              Código: {p.codigo}
+                            </div>
+                          </td>
+                          <td className="text-end align-middle">
+                            <div className="fw-semibold text-success">
+                              {formatMoney(p.precio ?? 0)}
+                            </div>
+                            <div className="text-body-primary small">
+                              Costo:{' '}
+                              {p.precioCompra != null
+                                ? formatMoney(p.precioCompra)
+                                : '-'}
+                            </div>
+                            <div className="text-body-primary small">
+                              Stock: {p.cantidad}
+                            </div>
+                            <div className="text-body-primary small">
+                                                            Estado:{' '}
+                              {p.activo === false ? 'Inactivo' : 'Activo'}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Panel de stock + edición */}
+              {productoSeleccionado ? (
+                <>
+                  <div className="mb-2 small">
+                    <div>
+                      <strong>Seleccionado:</strong>{' '}
+                      {productoSeleccionado.descripcion} (
+                      {productoSeleccionado.codigo})
+                    </div>
+                    <div>
+                      <strong>Stock actual:</strong>{' '}
+                      {productoSeleccionado.cantidad}
+                    </div>
+                  </div>
+
+                  {/* Agregar stock */}
+                  <div className="mb-3 border rounded p-2 bg-body-tertiary">
+                    <label className="form-label mb-1">
+                      Agregar unidades al inventario
+                    </label>
+                    <div className="input-group input-group-sm mb-1">
+                      <input
+                        type="number"
+                        min="1"
+                        className="form-control form-control-sm"
+                        value={cantidadAgregar}
+                        onChange={(e) => setCantidadAgregar(e.target.value)}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-outline-primary btn-sm"
+                        onClick={agregarStock}
+                      >
+                        Agregar
+                      </button>
+                    </div>
+                    <div className="form-text">
+                      Ejemplo: si tenías 10 y agregas 20, el inventario quedará
+                      en 30.
+                    </div>
+                  </div>
+
+                  {/* Edición de datos */}
+                  <div className="border rounded p-2 bg-body">
+                    <div className="mb-2">
+                      <label className="form-label mb-1">
+                        Modificar descripción
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control form-control-sm"
+                        value={descripcionEdit}
+                        onChange={(e) => setDescripcionEdit(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="mb-2">
+                      <label className="form-label mb-1">
+                        Modificar precio venta
+                      </label>
+                      <div className="input-group input-group-sm">
+                        <span className="input-group-text">$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="form-control"
+                          value={precioEdit}
+                          onChange={(e) => setPrecioEdit(e.target.value)}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mb-2">
+                      <label className="form-label mb-1">
+                        Modificar costo de compra
+                      </label>
+                      <div className="input-group input-group-sm">
+                        <span className="input-group-text">$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="form-control"
+                          value={precioCompraEdit}
+                          onChange={(e) =>
+                            setPrecioCompraEdit(e.target.value)
+                          }
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mb-2">
+                      <label className="form-label mb-1">
+                        Modificar código
+                      </label>
+                      <input
+                        type="text"
+                        className="form-control form-control-sm"
+                        value={codigoEdit}
+                        onChange={(e) => setCodigoEdit(e.target.value)}
+                      />
+                    </div>
+
+                    <div className="mb-3 form-check">
+                      <input
+                        className="form-check-input"
+                        type="checkbox"
+                        id="activoEdit"
+                        checked={activoEdit}
+                        onChange={(e) => setActivoEdit(e.target.checked)}
+                      />
+                      <label
+                        className="form-check-label small"
+                        htmlFor="activoEdit"
+                      >
+                        Producto activo (visible y vendible)
+                      </label>
+                    </div>
+
+                    <div className="d-flex justify-content-end">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-warning"
+                        onClick={guardarCambiosProducto}
+                      >
+                        Guardar cambios
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="small text-body-secondary mt-2">
+                  Busca y selecciona un producto para sumar inventario o
+                  actualizar su información.
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

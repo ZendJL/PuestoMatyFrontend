@@ -1,144 +1,19 @@
-/* Fondo general de la app */
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  background: radial-gradient(circle at top, #e0f2fe 0, #f9fafb 40%, #e5e7eb 100%);
-  color: #111827;
+:root,
+[data-bs-theme="light"] {
+  --bs-body-bg: #e5edf7;        /* gris-azulado suave de fondo */
+  --bs-body-color: #212529;
+
+  /* Cards ligeramente más claras que el fondo */
+  --bs-card-bg: #ffffff;
+  --bs-card-border-color: #d0d7e2;
+
+  /* Navbar y encabezados con azul */
+  --bs-primary: #0d6efd;        /* puedes cambiar a tu azul favorito */
+  --bs-link-color: #0d6efd;
 }
 
-/* Contenedores principales */
-.app-shell {
-  min-height: 100vh;
-}
-
-/* Navbar */
-nav {
-  backdrop-filter: blur(8px);
-}
-
-/* Tablas */
-table {
-  border-collapse: collapse;
-}
-
-th, td {
-  font-size: 0.9rem;
-}
-
-thead th {
-  position: sticky;
-  top: 0;
-  background-color: #f9fafb;
-  z-index: 1;
-}
-
-/* Scroll bonito */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #e5e7eb;
-  border-radius: 999px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: #9ca3af;
-  border-radius: 999px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: #6b7280;
-}
-
-/* Inputs */
-input[type="text"],
-input[type="number"],
-input[type="date"],
-textarea,
-select {
-  border-radius: 0.5rem;
-  border: 1px solid #d1d5db;
-  padding: 0.4rem 0.6rem;
-  font-size: 0.95rem;
-}
-
-input:focus,
-textarea:focus,
-select:focus {
-  outline: none;
-  border-color: #2563eb;
-  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.35);
-}
-
-/* Botones primarios y secundarios (fallback si no usas Tailwind) */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 0.75rem;
-  padding: 0.6rem 1.4rem;
-  font-weight: 600;
-  border: none;
-  cursor: pointer;
-  transition: transform 0.05s ease, box-shadow 0.1s ease, background 0.1s ease;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #22c55e, #16a34a);
-  color: white;
-  box-shadow: 0 10px 20px rgba(22, 163, 74, 0.25);
-}
-
-.btn-primary:hover {
-  filter: brightness(1.05);
-  transform: translateY(-1px);
-}
-
-.btn-secondary {
-  background: #6b7280;
-  color: white;
-}
-
-.btn-secondary:hover {
-  filter: brightness(1.05);
-}
-
-/* Tarjetas */
-.card {
-  background: white;
-  border-radius: 1rem;
-  box-shadow:
-    0 10px 15px -3px rgba(15, 23, 42, 0.12),
-    0 4px 6px -4px rgba(15, 23, 42, 0.08);
-  padding: 1.5rem;
-}
-
-/* Grupo de radios para tipo de merma */
-.tipo-merma-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.tipo-merma-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.35rem 0.7rem;
-  border-radius: 999px;
-  border: 1px solid #e5e7eb;
-  background-color: #f9fafb;
-  cursor: pointer;
-  font-size: 0.8rem;
-}
-
-.tipo-merma-option input[type="radio"] {
-  accent-color: #ef4444;
-}
-
-.tipo-merma-option:hover {
-  background-color: #fee2e2;
-  border-color: #fca5a5;
+/* Modo oscuro se queda igual */
+[data-bs-theme="dark"] {
+  --bs-body-bg: #121212;
+  --bs-body-color: #f8f9fa;
 }

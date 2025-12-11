@@ -1,405 +1,396 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
-
-function formatoFechaInput(date) {
-  return date.toISOString().substring(0, 10); // YYYY-MM-DD
-}
-
-function getInicioFinPeriodo(tipo) {
-  const hoy = new Date();
-  const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
-  if (tipo === 'dia') {
-    const finDia = new Date(
-      hoy.getFullYear(),
-      hoy.getMonth(),
-      hoy.getDate(),
-      23,
-      59,
-      59
-    );
-    return { desde: inicioDia, hasta: finDia };
-  }
-  if (tipo === 'semana') {
-    const day = hoy.getDay(); // 0=domingo
-    const diff = hoy.getDate() - day + (day === 0 ? -6 : 1); // lunes
-    const inicioSemana = new Date(hoy.getFullYear(), hoy.getMonth(), diff);
-    const finSemana = new Date(inicioSemana);
-    finSemana.setDate(inicioSemana.getDate() + 6);
-    finSemana.setHours(23, 59, 59, 999);
-    return { desde: inicioSemana, hasta: finSemana };
-  }
-  if (tipo === 'mes') {
-    const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    const finMes = new Date(
-      hoy.getFullYear(),
-      hoy.getMonth() + 1,
-      0,
-      23,
-      59,
-      59
-    );
-    return { desde: inicioMes, hasta: finMes };
-  }
-  return { desde: inicioDia, hasta: hoy };
-}
+import { formatMoney, formatFecha } from '../../utils/format';
 
 export default function ReporteVentasGenerales() {
-  const [tipoPeriodo, setTipoPeriodo] = useState('dia');
-  const { desde: dIni, hasta: dFin } = getInicioFinPeriodo('dia');
-  const [desde, setDesde] = useState(formatoFechaInput(dIni));
-  const [hasta, setHasta] = useState(formatoFechaInput(dFin));
   const [busqueda, setBusqueda] = useState('');
+  const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null);
   const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
 
-  // Traer todas las ventas
-  const { data: ventasRaw, isLoading, error } = useQuery({
-    queryKey: ['ventas-reporte-generales'],
+  const { data: cuentasRaw, isLoading, error } = useQuery({
+    queryKey: ['cuentas-reporte-deudas'],
     queryFn: async () => {
-      const res = await axios.get('http://localhost:8080/api/ventas');
+      const res = await axios.get('/api/cuentas');
       return res.data;
     },
   });
 
+  const {
+    data: ventasRaw,
+    isLoading: loadingVentas,
+    error: errorVentas,
+  } = useQuery({
+    queryKey: ['ventas-reporte-deudas'],
+    queryFn: async () => {
+      const res = await axios.get('/api/ventas');
+      return res.data;
+    },
+  });
+
+  const cuentas = Array.isArray(cuentasRaw) ? cuentasRaw : [];
   const ventas = Array.isArray(ventasRaw) ? ventasRaw : [];
 
-  const ventasFiltradas = useMemo(() => {
-    if (!ventas.length) return [];
+  const cuentasConDeuda = useMemo(() => {
+    const texto = busqueda.toLowerCase();
+    return cuentas
+      .filter((c) => (c.saldo || 0) > 0)
+      .filter((c) =>
+        texto
+          ? c.nombre?.toLowerCase().includes(texto) ||
+            c.descripcion?.toLowerCase().includes(texto)
+          : true
+      )
+      .sort((a, b) => (b.saldo || 0) - (a.saldo || 0));
+  }, [cuentas, busqueda]);
 
-    const dDesde = new Date(desde + 'T00:00:00');
-    const dHasta = new Date(hasta + 'T23:59:59');
-
-    let lista = ventas
+  const ventasDeCuenta = useMemo(() => {
+    if (!cuentaSeleccionada) return [];
+    return ventas
       .filter((v) => {
-        if (!v.fecha) return false;
-        const f = new Date(v.fecha);
-        return f >= dDesde && f <= dHasta;
+        const idCuentaVenta = v.cuenta?.id ?? v.cuentaId;
+        return idCuentaVenta === cuentaSeleccionada.id;
       })
       .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  }, [ventas, cuentaSeleccionada]);
 
-    const texto = busqueda.toLowerCase();
-    if (texto) {
-      lista = lista.filter((v) => {
-        const idStr = String(v.id ?? '');
-        const cuentaNombre = v.cuenta?.nombre ?? '';
-        const desc = v.descripcion ?? '';
-        return (
-          idStr.includes(texto) ||
-          cuentaNombre.toLowerCase().includes(texto) ||
-          desc.toLowerCase().includes(texto)
-        );
-      });
-    }
-
-    return lista;
-  }, [ventas, desde, hasta, busqueda]);
-
-  const totalVentas = ventasFiltradas.length;
-  const totalImporte = ventasFiltradas.reduce(
-    (sum, v) => sum + (v.total || 0),
+  const totalDeudores = cuentasConDeuda.length;
+  const totalDeuda = cuentasConDeuda.reduce(
+    (sum, c) => sum + (c.saldo || 0),
     0
   );
-  const totalPrestamos = ventasFiltradas
-    .filter((v) => v.status === 'PRESTAMO')
-    .reduce((sum, v) => sum + (v.total || 0), 0);
 
-  // Ganancia total en el período (suma de todas las ventas filtradas)
-  const gananciaTotalGeneral = ventasFiltradas.reduce((acum, v) => {
-    const gananciaVenta = (v.ventaProductos || []).reduce((s, vp) => {
-      const precioVenta = vp.precioUnitario ?? vp.precio ?? 0;
-      const costoCompra = vp.producto?.precioCompra ?? 0;
-      const gananciaUnidad = precioVenta - costoCompra;
-      return s + (vp.cantidad || 0) * gananciaUnidad;
-    }, 0);
-    return acum + gananciaVenta;
-  }, 0);
-
-  const aplicarPeriodo = (nuevoTipo) => {
-    setTipoPeriodo(nuevoTipo);
-    if (nuevoTipo === 'rango') return;
-    const { desde: di, hasta: df } = getInicioFinPeriodo(nuevoTipo);
-    setDesde(formatoFechaInput(di));
-    setHasta(formatoFechaInput(df));
-  };
-
-  const handleClickVenta = (venta) => {
-    setVentaSeleccionada(venta);
-  };
-
-  if (isLoading) return <div>Cargando ventas...</div>;
-  if (error) return <div className="text-danger">Error al cargar ventas</div>;
+  if (isLoading || loadingVentas) {
+    return <div className="fs-6">Cargando datos...</div>;
+  }
+  if (error || errorVentas) {
+    return <div className="text-danger fs-6">Error al cargar datos</div>;
+  }
 
   return (
-    <div>
-      <h5 className="mb-3">Historial de ventas generales</h5>
-
-      {/* Filtros */}
-      <div className="row g-2 align-items-end mb-3">
-        <div className="col-auto">
-          <label className="form-label mb-1">Período</label>
-          <div className="btn-group btn-group-sm" role="group">
-            <button
-              type="button"
-              className={`btn btn-outline-primary ${
-                tipoPeriodo === 'dia' ? 'active' : ''
-              }`}
-              onClick={() => aplicarPeriodo('dia')}
-            >
-              Día
-            </button>
-            <button
-              type="button"
-              className={`btn btn-outline-primary ${
-                tipoPeriodo === 'semana' ? 'active' : ''
-              }`}
-              onClick={() => aplicarPeriodo('semana')}
-            >
-              Semana
-            </button>
-            <button
-              type="button"
-              className={`btn btn-outline-primary ${
-                tipoPeriodo === 'mes' ? 'active' : ''
-              }`}
-              onClick={() => aplicarPeriodo('mes')}
-            >
-              Mes
-            </button>
-            <button
-              type="button"
-              className={`btn btn-outline-primary ${
-                tipoPeriodo === 'rango' ? 'active' : ''
-              }`}
-              onClick={() => aplicarPeriodo('rango')}
-            >
-              Rango
-            </button>
+    <div className="d-flex justify-content-center">
+      <div
+        className="card shadow-sm fs-6 w-100"
+        style={{
+          maxWidth: 'calc(100vw - 100px)',
+          marginTop: '1.5rem',
+          marginBottom: '2rem',
+        }}
+      >
+        {/* Header azul */}
+        <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
+          <div>
+            <h5 className="mb-0">Reporte de deudas</h5>
+            <small className="text-white-50">
+              Cuentas con saldo pendiente y sus ventas a crédito.
+            </small>
           </div>
-        </div>
-
-        <div className="col-auto">
-          <label className="form-label mb-1">Desde</label>
-          <input
-            type="date"
-            className="form-control form-control-sm"
-            value={desde}
-            onChange={(e) => setDesde(e.target.value)}
-          />
-        </div>
-        <div className="col-auto">
-          <label className="form-label mb-1">Hasta</label>
-          <input
-            type="date"
-            className="form-control form-control-sm"
-            value={hasta}
-            onChange={(e) => setHasta(e.target.value)}
-          />
-        </div>
-
-        <div className="col-md-3">
-          <label className="form-label mb-1">Buscar venta</label>
-          <input
-            type="text"
-            className="form-control form-control-sm"
-            placeholder="ID, nombre de cuenta, descripción..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-          />
-        </div>
-
-        <div className="col small text-muted">
-          {totalVentas} ventas · Total:{' '}
-          <span className="fw-semibold text-success">
-            ${totalImporte.toFixed(2)}
-          </span>{' '}
-          · Préstamos:{' '}
-          <span className="fw-semibold text-warning">
-            ${totalPrestamos.toFixed(2)}
-          </span>{' '}
-          · Ganancia total:{' '}
-          <span className="fw-semibold text-primary">
-            ${gananciaTotalGeneral.toFixed(2)}
-          </span>
-        </div>
-      </div>
-
-      <div className="row">
-        {/* Tabla de ventas */}
-        <div className="col-md-7">
-          <div
-            className="border rounded"
-            style={{ maxHeight: 320, overflowY: 'auto' }}
-          >
-            <table className="table table-sm table-hover mb-0">
-              <thead className="table-light sticky-top">
-                <tr>
-                  <th style={{ width: 60 }}>ID</th>
-                  <th style={{ width: 150 }}>Fecha</th>
-                  <th style={{ width: 140 }}>Cuenta</th>
-                  <th className="text-end" style={{ width: 100 }}>
-                    Total
-                  </th>
-                  <th className="text-center" style={{ width: 90 }}>
-                    Status
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {ventasFiltradas.map((v) => (
-                  <tr
-                    key={v.id}
-                    onClick={() => handleClickVenta(v)}
-                    style={{ cursor: 'pointer' }}
-                    className={
-                      ventaSeleccionada?.id === v.id ? 'table-active' : ''
-                    }
-                  >
-                    <td>{v.id}</td>
-                    <td className="small">
-                      {v.fecha?.replace('T', ' ').substring(0, 19)}
-                    </td>
-                    <td className="small">
-                      {v.status === 'PRESTAMO'
-                        ? v.cuenta?.nombre
-                          ? v.cuenta.nombre
-                          : v.cuentaId
-                          ? `Cuenta ${v.cuentaId}`
-                          : 'Préstamo'
-                        : 'Contado'}
-                    </td>
-                    <td className="text-end fw-semibold">
-                      ${v.total?.toFixed(2)}
-                    </td>
-                    <td className="text-center">
-                      <span
-                        className={
-                          v.status === 'PRESTAMO'
-                            ? 'badge bg-warning text-dark'
-                            : 'badge bg-success-subtle text-success-emphasis border border-success-subtle'
-                        }
-                      >
-                        {v.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-
-                {ventasFiltradas.length === 0 && (
-                  <tr>
-                    <td colSpan={5} className="text-center text-muted py-3">
-                      No hay ventas en el período seleccionado.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Detalle de productos de la venta seleccionada */}
-        <div className="col-md-5">
-          <h6>Detalle de venta</h6>
-
-          {!ventaSeleccionada && (
-            <div className="text-muted small">
-              Selecciona una venta para ver sus productos.
+          <div className="text-end">
+            <div className="text-white-50">
+              Cuentas con deuda:{' '}
+              <strong className="text-warning">{totalDeudores}</strong>
             </div>
-          )}
+            <div className="fw-semibold text-warning">
+              Total adeudado: {formatMoney(totalDeuda)}
+            </div>
+          </div>
+        </div>
 
-          {ventaSeleccionada && (
-            <>
-              <div className="small mb-2">
-                <div>
-                  <strong>Folio:</strong> {ventaSeleccionada.id}
+        <div className="card-body py-3 bg-body">
+          <div className="row g-3">
+            {/* Columna izquierda: cuentas */}
+            <div className="col-md-6">
+              <div className="d-flex justify-content-between align-items-end mb-2">
+                <div className="flex-grow-1 me-2">
+                  <label className="form-label mb-1">Buscar cliente</label>
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    placeholder="Nombre o descripción de la cuenta..."
+                    value={busqueda}
+                    onChange={(e) => setBusqueda(e.target.value)}
+                  />
                 </div>
-                <div>
-                  <strong>Fecha:</strong>{' '}
-                  {ventaSeleccionada.fecha
-                    ?.replace('T', ' ')
-                    .substring(0, 19)}
-                </div>
-                <div>
-                  <strong>Tipo:</strong>{' '}
-                  {ventaSeleccionada.status === 'PRESTAMO'
-                    ? 'Préstamo'
-                    : 'Contado'}
+                <div className="text-body-primary small">
+                  {totalDeudores} cuentas listadas
                 </div>
               </div>
 
               <div
-                className="border rounded"
-                style={{ maxHeight: 260, overflowY: 'auto' }}
+                className="border rounded small bg-body"
+                style={{ maxHeight: 320, overflowY: 'auto' }}
               >
-                <table className="table table-sm mb-0">
-                  <thead className="table-light sticky-top">
+                <table className="table table-hover table-striped mb-0 align-middle fs-6">
+                  <thead className="sticky-top">
                     <tr>
-                      <th>Producto</th>
-                      <th className="text-center" style={{ width: 70 }}>
-                        Cant.
+                      <th style={{ width: 70 }}>ID</th>
+                      <th>Cliente</th>
+                      <th className="text-end" style={{ width: 130 }}>
+                        Saldo pendiente
                       </th>
-                      <th className="text-end" style={{ width: 90 }}>
-                        P. venta
-                      </th>
-                      <th className="text-end" style={{ width: 90 }}>
-                        Costo compra
-                      </th>
-                      <th className="text-end" style={{ width: 90 }}>
-                        Ganancia
-                      </th>
-                      <th className="text-end" style={{ width: 100 }}>
-                        Importe
-                      </th>
+                      <th>Notas</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {ventaSeleccionada.ventaProductos?.map((vp) => {
-                      const precioVenta =
-                        vp.precioUnitario ?? vp.precio ?? 0;
-                      const costoCompra =
-                        vp.producto?.precioCompra ?? 0;
-                      const gananciaUnidad =
-                        precioVenta - costoCompra;
-                      const importe =
-                        (vp.cantidad || 0) * precioVenta;
-                      return (
-                        <tr key={vp.id}>
-                          <td className="small">
-                            {vp.producto?.descripcion ||
-                              `Producto ${vp.producto?.id}`}
-                            <div className="text-muted">
-                              Código: {vp.producto?.codigo}
-                            </div>
-                          </td>
-                          <td className="text-center">{vp.cantidad}</td>
-                          <td className="text-end">
-                            ${precioVenta.toFixed(2)}
-                          </td>
-                          <td className="text-end">
-                            ${costoCompra.toFixed(2)}
-                          </td>
-                          <td className="text-end">
-                            ${gananciaUnidad.toFixed(2)}
-                          </td>
-                          <td className="text-end fw-semibold">
-                            ${importe.toFixed(2)}
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {cuentasConDeuda.map((c) => (
+                      <tr
+                        key={c.id}
+                        style={{ cursor: 'pointer' }}
+                        className={
+                          cuentaSeleccionada?.id === c.id ? 'table-primary' : ''
+                        }
+                        onClick={() => {
+                          setCuentaSeleccionada(c);
+                          setVentaSeleccionada(null);
+                        }}
+                      >
+                        <td className="small text-body-primary">{c.id}</td>
+                        <td>
+                          <div className="fw-semibold">{c.nombre}</div>
+                        </td>
+                        <td className="text-end">
+                          <span className="badge bg-danger-subtle text-danger fw-semibold">
+                            {formatMoney(c.saldo || 0)}
+                          </span>
+                        </td>
+                        <td
+                          className="text-truncate small text-body-primary"
+                          style={{ maxWidth: 220 }}
+                        >
+                          {c.descripcion}
+                        </td>
+                      </tr>
+                    ))}
 
-                    {(!ventaSeleccionada.ventaProductos ||
-                      ventaSeleccionada.ventaProductos.length === 0) && (
+                    {cuentasConDeuda.length === 0 && (
                       <tr>
-                        <td colSpan={6} className="text-center text-muted py-3">
-                          Esta venta no tiene productos asociados.
+                        <td
+                          colSpan={4}
+                          className="text-center text-body-primary py-3"
+                        >
+                          No hay cuentas con deudas pendientes.
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
-            </>
-          )}
+            </div>
+
+            {/* Columna derecha: detalle */}
+            <div className="col-md-6">
+              <div className="card h-100 fs-6">
+                <div className="card-header py-2 d-flex justify-content-between align-items-center bg-body-tertiary">
+                  <h6 className="mb-0">Detalle de la cuenta</h6>
+                  {cuentaSeleccionada && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary"
+                      onClick={() => {
+                        setCuentaSeleccionada(null);
+                        setVentaSeleccionada(null);
+                      }}
+                    >
+                      Quitar selección
+                    </button>
+                  )}
+                </div>
+                <div className="card-body py-2 bg-body">
+                  {!cuentaSeleccionada && (
+                    <div className="text-body-primary">
+                      Haz clic en una cuenta de la tabla izquierda para ver sus
+                      ventas a crédito y productos.
+                    </div>
+                  )}
+
+                  {cuentaSeleccionada && (
+                    <>
+                      <div className="mb-2">
+                        <div className="fw-semibold">
+                          {cuentaSeleccionada.nombre} (ID{' '}
+                          {cuentaSeleccionada.id})
+                        </div>
+                        <div>
+                          Saldo pendiente:{' '}
+                          <span className="text-danger fw-bold">
+                            {formatMoney(cuentaSeleccionada.saldo || 0)}
+                          </span>
+                        </div>
+                        {cuentaSeleccionada.descripcion && (
+                          <div className="text-body-primary small">
+                            Notas: {cuentaSeleccionada.descripcion}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Ventas a crédito */}
+                      <h6 className="fw-bold mb-1">Ventas a crédito</h6>
+                      <div
+                        className="border rounded small bg-body mb-2"
+                        style={{ maxHeight: 200, overflowY: 'auto' }}
+                      >
+                        <table className="table table-sm table-striped mb-0 align-middle fs-6">
+                          <thead className="sticky-top">
+                            <tr>
+                              <th style={{ width: 70 }}>Venta</th>
+                              <th style={{ width: 170 }}>Fecha</th>
+                              <th
+                                className="text-end"
+                                style={{ width: 120 }}
+                              >
+                                Total
+                              </th>
+                              <th style={{ width: 110 }}>Estado</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ventasDeCuenta.map((v) => (
+                              <tr
+                                key={v.id}
+                                style={{ cursor: 'pointer' }}
+                                className={
+                                  ventaSeleccionada?.id === v.id
+                                    ? 'table-primary'
+                                    : ''
+                                }
+                                onClick={() => setVentaSeleccionada(v)}
+                              >
+                                <td className="small text-body-primary">
+                                  {v.id}
+                                </td>
+                                <td className="small">
+                                  {formatFecha(v.fecha)}
+                                </td>
+                                <td className="text-end fw-semibold">
+                                  {formatMoney(v.total || 0)}
+                                </td>
+                                <td>
+                                  {v.status === 'PRESTAMO' ? (
+                                    <span className="badge bg-warning text-dark">
+                                      Préstamo
+                                    </span>
+                                  ) : (
+                                    <span className="badge bg-success-subtle text-success-emphasis border border-success-subtle">
+                                      {v.status}
+                                    </span>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+
+                            {ventasDeCuenta.length === 0 && (
+                              <tr>
+                                <td
+                                  colSpan={4}
+                                  className="text-center text-body-primary py-3"
+                                >
+                                  Esta cuenta no tiene ventas registradas.
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Productos de la venta seleccionada */}
+                      {ventaSeleccionada && (
+                        <div className="mt-2">
+                          <div className="d-flex justify-content-between align-items-center mb-1">
+                            <h6 className="fw-bold mb-0">
+                              Productos de la venta #{ventaSeleccionada.id}
+                            </h6>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-secondary"
+                              onClick={() => setVentaSeleccionada(null)}
+                            >
+                              Quitar venta
+                            </button>
+                          </div>
+
+                          <div
+                            className="border rounded small bg-body"
+                            style={{ maxHeight: 200, overflowY: 'auto' }}
+                          >
+                            <table className="table table-sm table-striped mb-0 align-middle fs-6">
+                              <thead className="sticky-top">
+                                <tr>
+                                  <th>Producto</th>
+                                  <th
+                                    className="text-center"
+                                    style={{ width: 80 }}
+                                  >
+                                    Cantidad
+                                  </th>
+                                  <th
+                                    className="text-end"
+                                    style={{ width: 110 }}
+                                  >
+                                    Precio
+                                  </th>
+                                  <th
+                                    className="text-end"
+                                    style={{ width: 120 }}
+                                  >
+                                    Importe
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {ventaSeleccionada.ventaProductos?.map((vp) => {
+                                  const precio =
+                                    vp.precioUnitario ?? vp.precio ?? 0;
+                                  const cantidad = vp.cantidad || 0;
+                                  const importe = cantidad * precio;
+
+                                  return (
+                                    <tr key={vp.id}>
+                                      <td>
+                                        {vp.producto?.descripcion ||
+                                          `Producto ${vp.producto?.id}`}
+                                        {vp.producto?.codigo && (
+                                          <div className="text-body-primary small">
+                                            Código: {vp.producto.codigo}
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td className="text-center">
+                                        {cantidad}
+                                      </td>
+                                      <td className="text-end">
+                                        {formatMoney(precio)}
+                                      </td>
+                                      <td className="text-end fw-semibold">
+                                        {formatMoney(importe)}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+
+                                {(!ventaSeleccionada.ventaProductos ||
+                                  ventaSeleccionada.ventaProductos.length ===
+                                    0) && (
+                                  <tr>
+                                    <td
+                                      colSpan={4}
+                                      className="text-center text-body-primary py-3"
+                                    >
+                                      Esta venta no tiene productos
+                                      registrados.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

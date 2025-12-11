@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
+import { formatMoney } from '../../utils/format';
 
 function formatoFechaInput(date) {
   return date.toISOString().substring(0, 10); // YYYY-MM-DD
@@ -51,6 +52,12 @@ export default function ReporteVentasPorProducto() {
   const [hasta, setHasta] = useState(formatoFechaInput(dFin));
   const [busqueda, setBusqueda] = useState('');
 
+  // sort de tabla
+  const [sortConfig, setSortConfig] = useState({
+    key: 'totalGanancia',
+    direction: 'desc',
+  });
+
   // Traer todos los VentaProducto
   const { data: vpRaw, isLoading, error } = useQuery({
     queryKey: ['ventas-productos-reporte'],
@@ -68,14 +75,12 @@ export default function ReporteVentasPorProducto() {
     const dDesde = new Date(desde + 'T00:00:00');
     const dHasta = new Date(hasta + 'T23:59:59');
 
-    // 1) Filtrar por rango de fechas usando la fecha de la venta
     const filtrados = ventaProductos.filter((vp) => {
       if (!vp.venta?.fecha) return false;
       const f = new Date(vp.venta.fecha);
       return f >= dDesde && f <= dHasta;
     });
 
-    // 2) Agrupar por producto (id) y calcular costo y ganancia
     const mapa = new Map();
     filtrados.forEach((vp) => {
       const prod = vp.producto || {};
@@ -115,7 +120,6 @@ export default function ReporteVentasPorProducto() {
 
     let arr = Array.from(mapa.values());
 
-    // 3) Filtro por texto producto
     const texto = busqueda.toLowerCase();
     if (texto) {
       arr = arr.filter(
@@ -124,9 +128,6 @@ export default function ReporteVentasPorProducto() {
           p.codigo?.toLowerCase().includes(texto)
       );
     }
-
-    // 4) Ordenar por monto vendido desc
-    arr.sort((a, b) => b.totalVentas - a.totalVentas);
 
     return arr;
   }, [ventaProductos, desde, hasta, busqueda]);
@@ -145,6 +146,54 @@ export default function ReporteVentasPorProducto() {
     0
   );
 
+  const sortedDatos = useMemo(() => {
+    const arr = [...datosAgrupados];
+    if (!sortConfig.key) return arr;
+
+    arr.sort((a, b) => {
+      const { key, direction } = sortConfig;
+      let vA = a[key];
+      let vB = b[key];
+
+      if (typeof vA === 'string') vA = vA.toLowerCase();
+      if (typeof vB === 'string') vB = vB.toLowerCase();
+
+      let comp = 0;
+      if (vA < vB) comp = -1;
+      if (vA > vB) comp = 1;
+
+      return direction === 'asc' ? comp : -comp;
+    });
+
+    return arr;
+  }, [datosAgrupados, sortConfig]);
+
+  const handleSort = (key) => {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === 'asc' ? 'desc' : 'asc',
+        };
+      }
+      return {
+        key,
+        direction:
+          key === 'descripcion' || key === 'codigo' ? 'asc' : 'desc',
+      };
+    });
+  };
+
+  const renderSortIcon = (key) => {
+    if (sortConfig.key !== key)
+      return <span className="text-body-primary ms-1">↕</span>;
+    return (
+      <span className="ms-1">
+        {sortConfig.direction === 'asc' ? '▲' : '▼'}
+      </span>
+    );
+  };
+
   const aplicarPeriodo = (nuevoTipo) => {
     setTipoPeriodo(nuevoTipo);
     if (nuevoTipo === 'rango') return;
@@ -153,177 +202,278 @@ export default function ReporteVentasPorProducto() {
     setHasta(formatoFechaInput(df));
   };
 
-  if (isLoading) return <div>Cargando ventas por producto...</div>;
-  if (error) return <div className="text-danger">Error al cargar ventas</div>;
+  if (isLoading) {
+    return <div className="fs-6">Cargando ventas por producto...</div>;
+  }
+  if (error) {
+    return <div className="text-danger fs-6">Error al cargar ventas</div>;
+  }
 
   return (
-    <div>
-      <h5 className="mb-3">Historial de ventas por producto</h5>
-
-      {/* Filtros */}
-      <div className="row g-2 align-items-end mb-3">
-        <div className="col-auto">
-          <label className="form-label mb-1">Período</label>
-          <div className="btn-group btn-group-sm" role="group">
-            <button
-              type="button"
-              className={`btn btn-outline-primary ${
-                tipoPeriodo === 'dia' ? 'active' : ''
-              }`}
-              onClick={() => aplicarPeriodo('dia')}
-            >
-              Día
-            </button>
-            <button
-              type="button"
-              className={`btn btn-outline-primary ${
-                tipoPeriodo === 'semana' ? 'active' : ''
-              }`}
-              onClick={() => aplicarPeriodo('semana')}
-            >
-              Semana
-            </button>
-            <button
-              type="button"
-              className={`btn btn-outline-primary ${
-                tipoPeriodo === 'mes' ? 'active' : ''
-              }`}
-              onClick={() => aplicarPeriodo('mes')}
-            >
-              Mes
-            </button>
-            <button
-              type="button"
-              className={`btn btn-outline-primary ${
-                tipoPeriodo === 'rango' ? 'active' : ''
-              }`}
-              onClick={() => aplicarPeriodo('rango')}
-            >
-              Rango
-            </button>
+    <div className="d-flex justify-content-center">
+      <div
+        className="card shadow-sm fs-6 w-100"
+        style={{
+          maxWidth: 'calc(100vw - 100px)',
+          marginTop: '1.5rem',
+          marginBottom: '2rem',
+        }}
+      >
+        <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
+          <div>
+            <h5 className="mb-0">Ventas por producto</h5>
+            <small className="text-white-50">
+              Analiza qué productos se venden más y cuál es su ganancia en el período.
+            </small>
           </div>
         </div>
 
-        <div className="col-auto">
-          <label className="form-label mb-1">Desde</label>
-          <input
-            type="date"
-            className="form-control form-control-sm"
-            value={desde}
-            onChange={(e) => setDesde(e.target.value)}
-          />
+        <div className="card-body py-3 bg-body">
+          {/* Resumen */}
+          <div className="row g-3 mb-3">
+            <div className="col-md-3">
+              <div className="border rounded p-2 bg-body">
+                <div className="small text-body-primary">Productos vendidos</div>
+                <div className="fs-5 fw-bold">{totalProductos}</div>
+              </div>
+            </div>
+            <div className="col-md-3">
+              <div className="border rounded p-2 bg-body">
+                <div className="small text-body-primary">Unidades totales</div>
+                <div className="fs-5 fw-bold">{totalUnidades}</div>
+              </div>
+            </div>
+            <div className="col-md-3">
+              <div className="border rounded p-2 bg-body">
+                <div className="small text-body-primary">Importe total</div>
+                <div className="fs-5 fw-bold text-success">
+                  {formatMoney(totalImporte)}
+                </div>
+              </div>
+            </div>
+            <div className="col-md-3">
+              <div className="border rounded p-2 bg-body">
+                <div className="small text-body-primary">Ganancia total</div>
+                <div className="fs-5 fw-bold text-primary">
+                  {formatMoney(totalGanancia)}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Filtros */}
+          <div className="border rounded p-2 mb-3 bg-body">
+            <div className="row g-2 align-items-end">
+              <div className="col-md-4">
+                <label className="form-label mb-1">Período rápido</label>
+                <div className="btn-group btn-group-sm w-100" role="group">
+                  <button
+                    type="button"
+                    className={`btn btn-outline-primary ${
+                      tipoPeriodo === 'dia' ? 'active' : ''
+                    }`}
+                    onClick={() => aplicarPeriodo('dia')}
+                  >
+                    Hoy
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-outline-primary ${
+                      tipoPeriodo === 'semana' ? 'active' : ''
+                    }`}
+                    onClick={() => aplicarPeriodo('semana')}
+                  >
+                    Semana
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-outline-primary ${
+                      tipoPeriodo === 'mes' ? 'active' : ''
+                    }`}
+                    onClick={() => aplicarPeriodo('mes')}
+                  >
+                    Mes
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-outline-primary ${
+                      tipoPeriodo === 'rango' ? 'active' : ''
+                    }`}
+                    onClick={() => aplicarPeriodo('rango')}
+                  >
+                    Rango
+                  </button>
+                </div>
+              </div>
+
+              <div className="col-auto">
+                <label className="form-label mb-1">Desde</label>
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  value={desde}
+                  onChange={(e) => setDesde(e.target.value)}
+                />
+              </div>
+              <div className="col-auto">
+                <label className="form-label mb-1">Hasta</label>
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  value={hasta}
+                  onChange={(e) => setHasta(e.target.value)}
+                />
+              </div>
+
+              <div className="col-md-3">
+                <label className="form-label mb-1">Buscar producto</label>
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  placeholder="Código o descripción..."
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                />
+              </div>
+
+              <div className="col small text-body-primary">
+                {totalProductos} productos distintos en el rango seleccionado.
+              </div>
+            </div>
+          </div>
+
+          {/* Tabla */}
+          <div className="card">
+            <div className="card-header py-2 d-flex justify-content-between align-items-center bg-body-tertiary">
+              <h6 className="mb-0">Detalle por producto</h6>
+              <small className="text-body-primary">
+                Clic en los encabezados para ordenar
+              </small>
+            </div>
+            <div className="card-body p-0 bg-body">
+              <div
+                className="table-responsive"
+                style={{ maxHeight: 360, overflowY: 'auto' }}
+              >
+                <table className="table table-sm table-hover table-striped mb-0 align-middle fs-6">
+                  <thead className="sticky-top">
+                    <tr>
+                      <th
+                        style={{ width: 70, cursor: 'pointer' }}
+                        onClick={() => handleSort('productoId')}
+                      >
+                        ID
+                        {renderSortIcon('productoId')}
+                      </th>
+                      <th
+                        style={{ minWidth: 220, cursor: 'pointer' }}
+                        onClick={() => handleSort('descripcion')}
+                      >
+                        Producto
+                        {renderSortIcon('descripcion')}
+                      </th>
+                      <th
+                        className="text-center"
+                        style={{ width: 110, cursor: 'pointer' }}
+                        onClick={() => handleSort('totalCantidad')}
+                      >
+                        Unidades Vendidas
+                        {renderSortIcon('totalCantidad')}
+                      </th>
+                      <th
+                        className="text-end"
+                        style={{ width: 140, cursor: 'pointer' }}
+                        onClick={() => handleSort('costoCompraReferencia')}
+                      >
+                        Costo
+                        {renderSortIcon('costoCompraReferencia')}
+                      </th>
+                      <th
+                        className="text-end"
+                        style={{ width: 140, cursor: 'pointer' }}
+                        onClick={() => handleSort('precioVentaReferencia')}
+                      >
+                        Precio
+                        {renderSortIcon('precioVentaReferencia')}
+                      </th>
+                      <th
+                        className="text-end"
+                        style={{ width: 140, cursor: 'pointer' }}
+                        onClick={() => handleSort('totalVentas')}
+                      >
+                        Importe total
+                        {renderSortIcon('totalVentas')}
+                      </th>
+                      <th
+                        className="text-end"
+                        style={{ width: 140, cursor: 'pointer' }}
+                        onClick={() => handleSort('totalGanancia')}
+                      >
+                        Ganancia total
+                        {renderSortIcon('totalGanancia')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedDatos.map((p) => {
+                      const precioVenta = p.totalCantidad
+                        ? p.totalVentas / p.totalCantidad // precio promedio
+                        : p.precioVentaReferencia;
+                      const costoCompra = p.totalCantidad
+                        ? p.totalCosto / p.totalCantidad // costo promedio
+                        : p.costoCompraReferencia;
+
+                      return (
+                        <tr key={p.productoId}>
+                          <td className="small text-body-primary">
+                            {p.productoId}
+                          </td>
+                          <td className="small">
+                            <div
+                              className="fw-semibold text-truncate"
+                              style={{ maxWidth: 260 }}
+                            >
+                              {p.descripcion}
+                            </div>
+                            <div className="text-body-primary small">
+                              Código: {p.codigo}
+                            </div>
+                          </td>
+                          <td className="text-center fw-semibold">
+                            {p.totalCantidad}
+                          </td>
+                          <td className="text-end text-body-primary">
+                            {formatMoney(costoCompra)}
+                          </td>
+                          <td className="text-end">
+                            {formatMoney(precioVenta)}
+                          </td>
+                          <td className="text-end fw-semibold text-success">
+                            {formatMoney(p.totalVentas)}
+                          </td>
+                          <td className="text-end fw-semibold text-primary">
+                            {formatMoney(p.totalGanancia)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+
+                    {sortedDatos.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={7}
+                          className="text-center text-body-primary py-3"
+                        >
+                          No hay ventas en el período seleccionado.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="col-auto">
-          <label className="form-label mb-1">Hasta</label>
-          <input
-            type="date"
-            className="form-control form-control-sm"
-            value={hasta}
-            onChange={(e) => setHasta(e.target.value)}
-          />
-        </div>
-
-        <div className="col-md-3">
-          <label className="form-label mb-1">Buscar producto</label>
-          <input
-            type="text"
-            className="form-control form-control-sm"
-            placeholder="Código o descripción..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-          />
-        </div>
-
-        <div className="col small text-muted">
-          {totalProductos} productos · {totalUnidades} unidades · Total:{' '}
-          <span className="fw-semibold text-success">
-            ${totalImporte.toFixed(2)}
-          </span>{' '}
-          · Ganancia total:{' '}
-          <span className="fw-semibold text-primary">
-            ${totalGanancia.toFixed(2)}
-          </span>
-        </div>
-      </div>
-
-      {/* Tabla */}
-      <div
-        className="border rounded"
-        style={{ maxHeight: 320, overflowY: 'auto' }}
-      >
-        <table className="table table-sm table-hover mb-0">
-          <thead className="table-light sticky-top">
-            <tr>
-              <th style={{ width: 80 }}>ID</th>
-              <th>Producto</th>
-              <th className="text-center" style={{ width: 90 }}>
-                Cantidad
-              </th>
-              <th className="text-end" style={{ width: 100 }}>
-                P. venta
-              </th>
-              <th className="text-end" style={{ width: 110 }}>
-                Costo compra
-              </th>
-              <th className="text-end" style={{ width: 110 }}>
-                Ganancia unid.
-              </th>
-              <th className="text-end" style={{ width: 120 }}>
-                Importe total
-              </th>
-              <th className="text-end" style={{ width: 120 }}>
-                Ganancia total
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {datosAgrupados.map((p) => {
-              const precioVenta = p.totalCantidad
-                ? p.totalVentas / p.totalCantidad
-                : p.precioVentaReferencia;
-              const costoCompra = p.totalCantidad
-                ? p.totalCosto / p.totalCantidad
-                : p.costoCompraReferencia;
-              const gananciaUnidad = precioVenta - costoCompra;
-
-              return (
-                <tr key={p.productoId}>
-                  <td>{p.productoId}</td>
-                  <td className="small text-truncate" style={{ maxWidth: 260 }}>
-                    {p.descripcion}
-                    <div className="text-muted small">
-                      Código: {p.codigo}
-                    </div>
-                  </td>
-                  <td className="text-center">{p.totalCantidad}</td>
-                  <td className="text-end">
-                    ${precioVenta.toFixed(2)}
-                  </td>
-                  <td className="text-end">
-                    ${costoCompra.toFixed(2)}
-                  </td>
-                  <td className="text-end">
-                    ${gananciaUnidad.toFixed(2)}
-                  </td>
-                  <td className="text-end fw-semibold text-success">
-                    ${p.totalVentas.toFixed(2)}
-                  </td>
-                  <td className="text-end fw-semibold text-primary">
-                    ${p.totalGanancia.toFixed(2)}
-                  </td>
-                </tr>
-              );
-            })}
-
-            {datosAgrupados.length === 0 && (
-              <tr>
-                <td colSpan={8} className="text-center text-muted py-3">
-                  No hay ventas en el período seleccionado.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
       </div>
     </div>
   );

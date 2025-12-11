@@ -2,16 +2,24 @@ import { useState, useMemo } from 'react';
 import axios from 'axios';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
+// Formato de dinero
+const formatMoney = (value) => {
+  if (!value && value !== 0) return '$0.00';
+  return `$${Number(value)
+    .toFixed(2)
+    .replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+};
+
 export default function Carrito() {
   const [carrito, setCarrito] = useState([]);
   const [busqueda, setBusqueda] = useState('');
   const [modoPrestamo, setModoPrestamo] = useState(false);
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null);
   const [busquedaCuenta, setBusquedaCuenta] = useState('');
+  const [pagoCliente, setPagoCliente] = useState('');
 
   const queryClient = useQueryClient();
 
-  // Productos
   const { data: productosRaw, isLoading, error } = useQuery({
     queryKey: ['productos-pos'],
     queryFn: async () => {
@@ -20,7 +28,6 @@ export default function Carrito() {
     },
   });
 
-  // Cuentas para préstamo
   const { data: cuentasRaw } = useQuery({
     queryKey: ['cuentas-prestamo'],
     queryFn: async () => {
@@ -52,10 +59,14 @@ export default function Carrito() {
     [carrito]
   );
 
-  // Agregar producto: mínimo 1, acumula +1, valida stock una sola vez
+  const cambio = useMemo(() => {
+    const pago = Number(pagoCliente);
+    if (Number.isNaN(pago)) return 0;
+    return Math.max(pago - total, 0);
+  }, [pagoCliente, total]);
+
   const agregarAlCarrito = (producto) => {
     const stock = producto.cantidad ?? 0;
-
     if (stock <= 0) {
       alert('Sin inventario disponible');
       return;
@@ -152,7 +163,14 @@ export default function Carrito() {
       return;
     }
 
-    // Validación final contra stock
+    if (!modoPrestamo) {
+      const pago = Number(pagoCliente);
+      if (Number.isNaN(pago) || pago < total) {
+        alert('El pago del cliente debe ser al menos igual al total.');
+        return;
+      }
+    }
+
     const invalido = carrito.find((item) => {
       const stock = item.stock ?? item.cantidad ?? 0;
       return item.cantidad > stock;
@@ -179,22 +197,26 @@ export default function Carrito() {
 
       const respuesta = await axios.post('/api/ventas', ventaData);
 
+      const mensajeCambio =
+        !modoPrestamo && cambio > 0
+          ? `\nCambio a entregar: ${formatMoney(cambio)}`
+          : '';
+
       alert(
         `✅ Venta #${respuesta.data.id} registrada ` +
           (modoPrestamo
             ? `como préstamo en la cuenta ${cuentaSeleccionada.nombre}`
             : 'de contado') +
-          ` por $${total.toFixed(2)}`
+          ` por ${formatMoney(total)}${mensajeCambio}`
       );
 
-      // limpiar estado local
       setCarrito([]);
       setModoPrestamo(false);
       setCuentaSeleccionada(null);
       setBusquedaCuenta('');
       setBusqueda('');
+      setPagoCliente('');
 
-      // refrescar productos (stock) y cuentas (saldo) en React Query
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['productos-pos'] }),
         queryClient.invalidateQueries({ queryKey: ['cuentas-prestamo'] }),
@@ -205,251 +227,341 @@ export default function Carrito() {
     }
   };
 
-  if (isLoading) {
-    return <div>Cargando productos...</div>;
-  }
-
-  if (error) {
-    return <div className="text-danger">Error al cargar productos</div>;
-  }
+  if (isLoading) return <div>Cargando productos...</div>;
+  if (error) return <div className="text-danger">Error al cargar productos</div>;
 
   return (
-    <div className="card shadow-sm">
-      <div className="card-header d-flex justify-content-between align-items-center py-2">
-        <h5 className="mb-0">Punto de venta</h5>
-        <span className="fw-bold text-success">
-          Total: ${total.toFixed(2)}
-        </span>
-      </div>
-
-      <div className="card-body py-3">
-        {/* Contado / Préstamo */}
-        <div className="alert alert-light d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between mb-2 py-2">
+    <div className="d-flex justify-content-center">
+      <div
+        className="card shadow-sm w-100"
+        style={{
+          maxWidth: 'calc(100vw - 100px)', // 50px por lado
+          marginTop: '1.5rem',
+          marginBottom: '2rem',
+        }}
+      >
+        {/* Header azul, estilo clásico en modo claro */}
+        <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
           <div>
-            <div className="form-check form-check-inline mb-1">
-              <input
-                className="form-check-input"
-                type="radio"
-                name="modoPago"
-                id="modoContado"
-                checked={!modoPrestamo}
-                onChange={() => setModoPrestamo(false)}
-              />
-              <label className="form-check-label" htmlFor="modoContado">
-                Contado
-              </label>
-            </div>
-            <div className="form-check form-check-inline mb-1">
-              <input
-                className="form-check-input"
-                type="radio"
-                name="modoPago"
-                id="modoPrestamo"
-                checked={modoPrestamo}
-                onChange={() => setModoPrestamo(true)}
-              />
-              <label className="form-check-label" htmlFor="modoPrestamo">
-                Préstamo / Por pagar
-              </label>
+            <h5 className="mb-0">Punto de venta</h5>
+            <small className="text-white-100">
+              Registra ventas de contado o a crédito
+            </small>
+          </div>
+          <div className="text-end">
+            <div className="med text-white-100">Total a cobrar</div>
+            <div className="fs-4 fw-bold text-warning">
+              {formatMoney(total)}
             </div>
           </div>
+        </div>
 
-          {modoPrestamo && (
-            <div className="w-100 mt-2 mt-md-0 ms-md-3">
-              <div className="mb-1">
-                <label className="form-label mb-1 small">Buscar cuenta</label>
+        <div className="card-body py-3">
+          <div className="row g-3">
+            {/* Columna izquierda: búsqueda y carrito */}
+            <div className="col-md-8 border-end">
+              {/* Buscador de productos */}
+              <div className="mb-2">
+                <label className="form-label mb-1 fw-semibold">
+                  Producto
+                </label>
                 <input
                   className="form-control form-control-sm"
-                  placeholder="Escribe nombre del cliente..."
-                  value={busquedaCuenta}
-                  onChange={(e) => setBusquedaCuenta(e.target.value)}
+                  placeholder="Escanea código o escribe nombre..."
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                  onKeyDown={(e) =>
+                    e.key === 'Enter' && manejarSeleccionPorEnter()
+                  }
+                  autoFocus
                 />
               </div>
 
-              {busquedaCuenta && (
+              {/* Resultados */}
+              {busqueda && productosFiltrados.length > 0 && (
                 <div
-                  className="border rounded small bg-white"
-                  style={{ maxHeight: 140, overflowY: 'auto' }}
+                  className="mb-3 border rounded small"
+                  style={{ maxHeight: 160, overflowY: 'auto' }}
                 >
-                  <table className="table table-sm mb-0">
+                  <table className="table table-hover table-sm mb-0">
                     <tbody>
-                      {cuentas
-                        .filter((c) =>
-                          c.nombre
-                            ?.toLowerCase()
-                            .includes(busquedaCuenta.toLowerCase())
-                        )
-                        .slice(0, 8)
-                        .map((c) => (
-                          <tr
-                            key={c.id}
-                            style={{ cursor: 'pointer' }}
-                            className={
-                              cuentaSeleccionada?.id === c.id
-                                ? 'table-primary'
-                                : ''
-                            }
-                            onClick={() => {
-                              setCuentaSeleccionada(c);
-                              setBusquedaCuenta(c.nombre);
-                            }}
+                      {productosFiltrados.map((p) => (
+                        <tr
+                          key={p.id}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => manejarSeleccionProducto(p)}
+                        >
+                          <td
+                            className="text-truncate"
+                            style={{ maxWidth: 260 }}
                           >
-                            <td>
-                              <div className="fw-semibold">{c.nombre}</div>
-                              <div className="small text-muted">
-                                Saldo: ${c.saldo?.toFixed(2) ?? 0}
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
+                            <div className="fw-semibold">{p.descripcion}</div>
+                            <div className="text-body-secondary small">
+                                                            Código: {p.codigo}
+                            </div>
+                          </td>
+                          <td className="text-end align-middle">
+                            <div className="fw-semibold text-success">
+                              {formatMoney(p.precio)}
+                            </div>
+                            <div className="text-body-secondary small">
+                              Stock: {p.cantidad}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
               )}
 
-              {cuentaSeleccionada && (
-                <div className="small text-muted mt-1">
-                  Cuenta seleccionada:{' '}
-                  <strong>{cuentaSeleccionada.nombre}</strong>{' '}
-                  (saldo actual ${cuentaSeleccionada.saldo?.toFixed(2) ?? 0})
+              {/* Carrito */}
+              <div
+                className="border rounded small"
+                style={{ maxHeight: 260, overflowY: 'auto' }}
+              >
+                <table className="table table-hover table-sm mb-0">
+                  <thead className="sticky-top">
+                    <tr>
+                      <th>Producto</th>
+                      <th className="text-end">Precio</th>
+                      <th className="text-center" style={{ width: 90 }}>
+                        Cant.
+                      </th>
+                      <th className="text-end">Subtotal</th>
+                      <th style={{ width: 40 }} />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {carrito.map((item) => (
+                      <tr key={item.id}>
+                        <td className="text-truncate" style={{ maxWidth: 220 }}>
+                          {item.descripcion}
+                          <div className="small text-body-secondary">
+                            Código: {item.codigo} · Stock: {item.stock}
+                          </div>
+                        </td>
+                        <td className="text-end">
+                          {formatMoney(item.precio)}
+                        </td>
+                        <td className="text-center">
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.cantidad}
+                            onChange={(e) =>
+                              cambiarCantidad(item.id, e.target.value)
+                            }
+                            className="form-control form-control-sm text-center"
+                          />
+                        </td>
+                        <td className="text-end fw-semibold text-success">
+                          {formatMoney(item.precio * item.cantidad)}
+                        </td>
+                        <td className="text-end">
+                          <button
+                            onClick={() => quitarDelCarrito(item.id)}
+                            className="btn btn-sm btn-outline-danger"
+                            title="Quitar"
+                          >
+                            ×
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {carrito.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="text-center text-body-secondary py-3"
+                        >
+                          Carrito vacío. Escanea o busca un producto para
+                          comenzar.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Columna derecha: modo pago, cuenta, pago/cambio */}
+            <div className="col-md-4">
+              {/* Modo de pago */}
+              <div className="mb-3 border rounded p-2 bg-body-tertiary">
+                <div className="fw-semibold mb-1">Modo de pago</div>
+                <div className="form-check">
+                  <input
+                    className="form-check-input"
+                    type="radio"
+                    name="modoPago"
+                    id="modoContado"
+                    checked={!modoPrestamo}
+                    onChange={() => setModoPrestamo(false)}
+                  />
+                  <label className="form-check-label" htmlFor="modoContado">
+                    Contado
+                  </label>
+                </div>
+                <div className="form-check mt-1">
+                  <input
+                    className="form-check-input"
+                    type="radio"
+                    name="modoPago"
+                    id="modoPrestamo"
+                    checked={modoPrestamo}
+                    onChange={() => setModoPrestamo(true)}
+                  />
+                  <label className="form-check-label" htmlFor="modoPrestamo">
+                    Préstamo / Por pagar
+                  </label>
+                </div>
+              </div>
+
+              {/* Cuenta de cliente cuando es préstamo */}
+              {modoPrestamo && (
+                <div className="mb-3 border rounded p-2 bg-body-tertiary">
+                  <div className="fw-semibold mb-1">Cuenta del cliente</div>
+                  <input
+                    className="form-control form-control-sm mb-1"
+                    placeholder="Buscar por nombre..."
+                    value={busquedaCuenta}
+                    onChange={(e) => setBusquedaCuenta(e.target.value)}
+                  />
+                  {busquedaCuenta && (
+                    <div
+                      className="border rounded small bg-body"
+                      style={{ maxHeight: 140, overflowY: 'auto' }}
+                    >
+                      <table className="table table-sm mb-0">
+                        <tbody>
+                          {cuentas
+                            .filter((c) =>
+                              c.nombre
+                                ?.toLowerCase()
+                                .includes(busquedaCuenta.toLowerCase())
+                            )
+                            .slice(0, 8)
+                            .map((c) => (
+                              <tr
+                                key={c.id}
+                                style={{ cursor: 'pointer' }}
+                                className={
+                                  cuentaSeleccionada?.id === c.id
+                                    ? 'table-primary'
+                                    : ''
+                                }
+                                onClick={() => {
+                                  setCuentaSeleccionada(c);
+                                  setBusquedaCuenta(c.nombre);
+                                }}
+                              >
+                                <td>
+                                  <div className="fw-semibold">{c.nombre}</div>
+                                  <div className="small ">
+                                    Saldo: {formatMoney(c.saldo ?? 0)}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  {cuentaSeleccionada && (
+                    <div className="small text-body-secondary mt-1">
+                      Seleccionada:{' '}
+                      <strong>{cuentaSeleccionada.nombre}</strong> (saldo{' '}
+                      {formatMoney(cuentaSeleccionada.saldo ?? 0)})
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
-          )}
-        </div>
 
-        {/* Buscador de productos */}
-        <div className="mb-3">
-          <label className="form-label mb-1">
-            Buscar producto (código o descripción)
-          </label>
-          <input
-            className="form-control form-control-sm"
-            placeholder="Escanea código o escribe nombre..."
-            value={busqueda}
-            onChange={(e) => setBusqueda(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && manejarSeleccionPorEnter()}
-            autoFocus
-          />
-        </div>
-
-        {/* Resultados de productos */}
-        {busqueda && productosFiltrados.length > 0 && (
-          <div
-            className="mb-3 border rounded small"
-            style={{ maxHeight: 180, overflowY: 'auto' }}
-          >
-            <table className="table table-hover table-sm mb-0">
-              <tbody>
-                {productosFiltrados.map((p) => (
-                  <tr
-                    key={p.id}
-                    style={{ cursor: 'pointer' }}
-                    onClick={() => manejarSeleccionProducto(p)}
-                  >
-                    <td className="text-truncate" style={{ maxWidth: 240 }}>
-                      <div className="fw-semibold">{p.descripcion}</div>
-                      <div className="text-muted small">Código: {p.codigo}</div>
-                    </td>
-                    <td className="text-end align-middle">
-                      <div className="fw-semibold text-success">
-                        ${p.precio}
-                      </div>
-                      <div className="text-muted small">
-                        Inventario: {p.cantidad}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Carrito */}
-        <div
-          className="border rounded small"
-          style={{ maxHeight: 260, overflowY: 'auto' }}
-        >
-          <table className="table table-striped table-hover table-sm mb-0">
-            <thead className="table-light sticky-top">
-              <tr>
-                <th>Producto</th>
-                <th className="text-end">Precio</th>
-                <th className="text-center">Cant.</th>
-                <th className="text-end">Subtotal</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {carrito.map((item) => (
-                <tr key={item.id}>
-                  <td className="text-truncate" style={{ maxWidth: 200 }}>
-                    {item.descripcion}
-                    <div className="small text-muted">
-                      Código: {item.codigo} · Inventario: {item.stock}
-                    </div>
-                  </td>
-                  <td className="text-end">
-                    ${item.precio.toFixed(2)}
-                  </td>
-                  <td className="text-center" style={{ width: 80 }}>
-                    <input
-                      type="number"
-                      min="1"
-                      value={item.cantidad}
-                      onChange={(e) =>
-                        cambiarCantidad(item.id, e.target.value)
-                      }
-                      className="form-control form-control-sm text-center"
-                    />
-                  </td>
-                  <td className="text-end fw-semibold text-success">
-                    {(item.precio * item.cantidad).toFixed(2)}
-                  </td>
-                  <td className="text-end">
-                    <button
-                      onClick={() => quitarDelCarrito(item.id)}
-                      className="btn btn-sm btn-outline-danger"
-                    >
-                      ×
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {carrito.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="text-center text-muted py-3">
-                    Carrito vacío. Escanea o busca un producto para comenzar.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              {/* Pago y cambio */}
+              {!modoPrestamo && (
+  <div className="mb-3 border rounded p-2 bg-body-tertiary">
+    <div className="fw-semibold mb-1">Cobro</div>
+    <div className="mb-2">
+      <label className="form-label mb-1 small">
+        Pago del cliente
+      </label>
+      <div className="input-group input-group-sm">
+        <span className="input-group-text">$</span>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          className="form-control"
+          value={pagoCliente}
+          onChange={(e) => setPagoCliente(e.target.value)}
+          placeholder="0.00"
+        />
       </div>
+    </div>
+  </div>
+)}
 
-      {/* Acciones */}
-      <div className="card-footer d-flex justify-content-end gap-2 py-2">
-        <button
-          onClick={() => {
-            setCarrito([]);
-            setModoPrestamo(false);
-            setCuentaSeleccionada(null);
-            setBusquedaCuenta('');
-            setBusqueda('');
-          }}
-          className="btn btn-sm btn-secondary"
-        >
-          Limpiar
-        </button>
-        <button
-          onClick={finalizarVenta}
-          disabled={carrito.length === 0 || (modoPrestamo && !cuentaSeleccionada)}
-          className="btn btn-sm btn-success"
-        >
-          {modoPrestamo ? 'Registrar préstamo' : 'Cobrar'} ${total.toFixed(2)}
-        </button>
+
+              {/* Resumen final */}
+              <div className="border rounded p-3 bg-body">
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <span className="fw-semibold">Artículos</span>
+                  <span className="fs-6 fw-semibold">{carrito.length}</span>
+                </div>
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <span className="fw-semibold">Subtotal</span>
+                  <span className="fs-6 fw-semibold">
+                    {formatMoney(total)}
+                  </span>
+                </div>
+                {!modoPrestamo && (
+                  <div className="d-flex justify-content-between align-items-center mb-2">
+                    <span className="fw-semibold">Pago</span>
+                    <span className="fs-6 fw-semibold">
+                      {formatMoney(Number(pagoCliente) || 0)}
+                    </span>
+                  </div>
+                )}
+                {!modoPrestamo && (
+                  <div className="d-flex justify-content-between align-items-center">
+                    <span className="fw-semibold">Cambio</span>
+                    <span className="fs-5 fw-bold text-success">
+                      {formatMoney(cambio)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Acciones */}
+        <div className="card-footer d-flex justify-content-between align-items-center py-2">
+          <button
+            onClick={() => {
+              setCarrito([]);
+              setModoPrestamo(false);
+              setCuentaSeleccionada(null);
+              setBusquedaCuenta('');
+              setBusqueda('');
+              setPagoCliente('');
+            }}
+            className="btn btn-sm btn-outline-secondary"
+          >
+            Limpiar venta
+          </button>
+          <button
+            onClick={finalizarVenta}
+            disabled={
+              carrito.length === 0 || (modoPrestamo && !cuentaSeleccionada)
+            }
+            className="btn btn-sm btn-success"
+          >
+            {modoPrestamo ? 'Registrar préstamo' : 'Cobrar'} ·{' '}
+            {formatMoney(total)}
+          </button>
+        </div>
       </div>
     </div>
   );

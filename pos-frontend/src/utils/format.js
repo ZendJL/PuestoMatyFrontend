@@ -1,4 +1,4 @@
-// src/utils/money.js (o format.js)
+//format.js
 const moneyFormatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',

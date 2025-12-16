@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
-import Carrito from './components/Carrito';
+import Venta from './components/Venta/Venta';
 import Merma from './components/Merma';
 import ConsultaVentas from './components/ConsultaVentas';
 import AltasProductos from './components/AltasProductos';
@@ -88,8 +88,8 @@ function App() {
 
       <main className="container my-3">
         <Routes>
-          <Route path="/" element={<Carrito />} />
-          <Route path="/ventas" element={<Carrito />} />
+          <Route path="/" element={<Venta />} />
+          <Route path="/ventas" element={<Venta />} />
           <Route path="/merma" element={<Merma />} />
           <Route path="/consultaventas" element={<ConsultaVentas />} />
           <Route path="/altasProductos" element={<AltasProductos />} />

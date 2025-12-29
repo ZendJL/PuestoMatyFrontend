@@ -1,798 +1,717 @@
 import { useState, useMemo } from 'react';
 import axios from 'axios';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { formatMoney, formatFecha } from '../utils/format.js';
-
-const estadoInicial = {
-  nombre: '',
-  descripcion: '',
-  saldo: '',
-};
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { formatMoney, formatFecha } from '../utils/format';
+import DataTable from './common/DataTable';
 
 export default function Cuentas() {
-  const [form, setForm] = useState(estadoInicial);
-  const [guardando, setGuardando] = useState(false);
-
-  // Gestión de abonos / selección
   const [busqueda, setBusqueda] = useState('');
-  const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null);
+  const [cuentaExpandida, setCuentaExpandida] = useState(null);
+  const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
   const [montoAbono, setMontoAbono] = useState('');
-
-  // Edición de cuenta seleccionada
-  const [nombreEdit, setNombreEdit] = useState('');
-  const [descripcionEdit, setDescripcionEdit] = useState('');
-  const [mostrarEdicionCliente, setMostrarEdicionCliente] = useState(false);
-
-  // sort tabla cuentas
-  const [sortConfig, setSortConfig] = useState({
-    key: 'saldo',
-    direction: 'desc',
-  });
-
+  const [pageSize, setPageSize] = useState(10);
+  const [soloDeudores, setSoloDeudores] = useState(false);
+  const [mostrarNuevoCliente, setMostrarNuevoCliente] = useState(false);
+  const [editandoCliente, setEditandoCliente] = useState(null);
+  const [nuevoCliente, setNuevoCliente] = useState({ nombre: '', descripcion: '' });
+  const [clienteEditando, setClienteEditando] = useState({ nombre: '', descripcion: '' });
+  
   const queryClient = useQueryClient();
 
-  // Cargar cuentas
-  const { data: cuentasRaw, isLoading, error } = useQuery({
-    queryKey: ['cuentas-gestion'],
+  // ✅ MUTACIÓN NUEVA CUENTA
+  const nuevaCuentaMutation = useMutation({
+    mutationFn: (cliente) => axios.post('/api/cuentas', cliente),
+    onSuccess: () => {
+      alert('✅ Nuevo cliente creado correctamente');
+      setMostrarNuevoCliente(false);
+      setNuevoCliente({ nombre: '', descripcion: '' });
+      queryClient.invalidateQueries({ queryKey: ['cuentas-resumen'] });
+    },
+    onError: (error) => {
+      alert('❌ Error al crear cliente: ' + (error.response?.data?.message || error.message));
+    },
+  });
+
+  // ✅ MUTACIÓN EDITAR CUENTA
+  const editarCuentaMutation = useMutation({
+    mutationFn: ({ id, cliente }) => axios.put(`/api/cuentas/${id}`, cliente),
+    onSuccess: (data, variables) => {
+      alert('✅ Cliente actualizado correctamente');
+      setEditandoCliente(null);
+      setClienteEditando({ nombre: '', descripcion: '' });
+      queryClient.invalidateQueries({ queryKey: ['cuentas-resumen'] });
+      if (cuentaExpandida?.id === variables.id) {
+        queryClient.invalidateQueries({ queryKey: ['cuenta-detalle', variables.id] });
+      }
+    },
+    onError: (error) => {
+      alert('❌ Error al actualizar: ' + (error.response?.data?.message || error.message));
+    },
+  });
+
+  // Resumen cuentas
+  const { data: cuentasResumen = [], isLoading, error } = useQuery({
+    queryKey: ['cuentas-resumen'],
+    queryFn: async () => axios.get('/api/cuentas/resumen').then(res => res.data),
+  });
+
+  // Detalle cuenta expandida
+  const { data: detalleCuenta, isLoading: loadingDetalle } = useQuery({
+    queryKey: ['cuenta-detalle', cuentaExpandida?.id],
+    enabled: !!cuentaExpandida?.id,
+    queryFn: async () => axios.get(`/api/cuentas/${cuentaExpandida.id}/detalles`).then(res => res.data),
+  });
+
+  // DETALLE DE VENTA (productos)
+  const { data: detalleVenta, isLoading: loadingVenta } = useQuery({
+    queryKey: ['venta-detalle', ventaSeleccionada?.ventaId],
+    enabled: !!ventaSeleccionada?.ventaId,
     queryFn: async () => {
-      const res = await axios.get('/api/cuentas');
+      const res = await axios.get(`/api/ventas/${ventaSeleccionada.ventaId}/productos`);
       return res.data;
     },
   });
 
-  const cuentas = Array.isArray(cuentasRaw) ? cuentasRaw : [];
+  // Mutación abono
+  const abonoMutation = useMutation({
+    mutationFn: (monto) => axios.post(`/api/cuentas/${cuentaExpandida.id}/abonar?monto=${monto}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cuentas-resumen'] });
+      queryClient.invalidateQueries({ queryKey: ['cuenta-detalle', cuentaExpandida?.id] });
+      setMontoAbono('');
+    },
+  });
 
-  const cuentasFiltradas = useMemo(() => {
-    const q = busqueda.toLowerCase();
-    let lista = cuentas.filter((c) =>
-      q
-        ? String(c.id).includes(q) ||
-          c.nombre?.toLowerCase().includes(q) ||
-          c.descripcion?.toLowerCase().includes(q)
-        : true
-    );
+  const datosFiltrados = useMemo(() => {
+    let filtrados = cuentasResumen;
 
-    // ordenamiento
-    if (sortConfig.key) {
-      const { key, direction } = sortConfig;
-      lista = [...lista].sort((a, b) => {
-        let vA = a[key] ?? 0;
-        let vB = b[key] ?? 0;
-
-        if (typeof vA === 'string') vA = vA.toLowerCase();
-        if (typeof vB === 'string') vB = vB.toLowerCase();
-
-        let comp = 0;
-        if (vA < vB) comp = -1;
-        if (vA > vB) comp = 1;
-
-        return direction === 'asc' ? comp : -comp;
-      });
+    if (soloDeudores) {
+      filtrados = filtrados.filter(c => (c.saldo || 0) > 0);
     }
 
-    return lista;
-  }, [cuentas, busqueda, sortConfig]);
+    const texto = busqueda.toLowerCase();
+    if (texto) {
+      filtrados = filtrados.filter(c => 
+        c.nombre?.toLowerCase().includes(texto) || 
+        c.descripcion?.toLowerCase().includes(texto)
+      );
+    }
 
-  const totalDeuda = cuentasFiltradas.reduce(
-    (sum, c) => sum + (c.saldo || 0),
-    0
-  );
+    return filtrados;
+  }, [cuentasResumen, busqueda, soloDeudores]);
 
-  // Cargar abonos y ventas para detalle
-  const { data: abonosRaw } = useQuery({
-    queryKey: ['abonos-cuentas'],
-    queryFn: async () => {
-      const res = await axios.get('/api/abonos');
-      return res.data;
-    },
-  });
+  // KPIs SIMPLIFICADOS
+  const totals = {
+    clientes: datosFiltrados.length,
+    saldoTotal: datosFiltrados.reduce((sum, c) => sum + (c.saldo || 0), 0),
+  };
 
-  const { data: ventasRaw } = useQuery({
-    queryKey: ['ventas-cuentas'],
-    queryFn: async () => {
-      const res = await axios.get('/api/ventas');
-      return res.data;
-    },
-  });
+  const handleAbono = () => {
+    const monto = parseFloat(montoAbono);
+    if (isNaN(monto) || monto <= 0) return alert('Monto inválido');
+    abonoMutation.mutate(monto);
+  };
 
-  const abonos = Array.isArray(abonosRaw) ? abonosRaw : [];
-  const ventas = Array.isArray(ventasRaw) ? ventasRaw : [];
-
-  const abonosDeCuenta = useMemo(() => {
-    if (!cuentaSeleccionada) return [];
-    return abonos
-      .filter((a) => a.cuentaId === cuentaSeleccionada.id)
-      .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-  }, [abonos, cuentaSeleccionada]);
-
-  const ventasDeCuenta = useMemo(() => {
-    if (!cuentaSeleccionada) return [];
-    return ventas
-      .filter((v) => (v.cuenta?.id ?? v.cuentaId) === cuentaSeleccionada.id)
-      .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
-  }, [ventas, cuentaSeleccionada]);
-
-  // sort handler
-  const handleSort = (key) => {
-    setSortConfig((prev) => {
-      if (prev.key === key) {
-        return {
-          key,
-          direction: prev.direction === 'asc' ? 'desc' : 'asc',
-        };
-      }
-      return {
-        key,
-        direction: key === 'nombre' || key === 'descripcion' ? 'asc' : 'desc',
-      };
+  // HANDLER NUEVA CUENTA
+  const handleCrearCliente = () => {
+    if (!nuevoCliente.nombre.trim()) {
+      alert('El nombre es obligatorio');
+      return;
+    }
+    nuevaCuentaMutation.mutate({
+      nombre: nuevoCliente.nombre.trim(),
+      descripcion: nuevoCliente.descripcion.trim() || null,
+      saldo: 0
     });
   };
 
-  const renderSortIcon = (key) => {
-    if (sortConfig.key !== key)
-      return <span className="text-body-primary ms-1">↕</span>;
-    return (
-      <span className="ms-1">
-        {sortConfig.direction === 'asc' ? '▲' : '▼'}
-      </span>
-    );
+  // ✅ HANDLER EDITAR CUENTA
+  const handleEditarCliente = (cliente) => {
+    setClienteEditando({
+      nombre: cliente.nombre || '',
+      descripcion: cliente.descripcion || ''
+    });
+    setEditandoCliente(cliente.id);
   };
 
-  // Alta de cuenta
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    if (!form.nombre) {
-      alert('El nombre del cliente es obligatorio');
+  const handleGuardarEdicion = () => {
+    if (!clienteEditando.nombre.trim()) {
+      alert('El nombre es obligatorio');
       return;
     }
-
-    try {
-      setGuardando(true);
-
-      const cuenta = {
-        nombre: form.nombre,
-        descripcion: form.descripcion || null,
-        saldo: form.saldo === '' ? 0 : parseFloat(form.saldo),
-      };
-
-      await axios.post('/api/cuentas', cuenta);
-
-      alert('✅ Cuenta de cliente guardada correctamente');
-      setForm(estadoInicial);
-
-      queryClient.invalidateQueries({ queryKey: ['cuentas-gestion'] });
-      queryClient.invalidateQueries({ queryKey: ['cuentas-reporte-deudas'] });
-    } catch (err) {
-      console.error(err);
-      alert('❌ Error al guardar la cuenta');
-    } finally {
-      setGuardando(false);
-    }
-  };
-
-  // Abonos
-  const realizarAbono = async () => {
-    if (!cuentaSeleccionada) {
-      alert('Selecciona una cuenta primero');
-      return;
-    }
-    const monto = Number(montoAbono);
-    if (Number.isNaN(monto) || monto <= 0) {
-      alert('El monto a abonar debe ser mayor a 0');
-      return;
-    }
-    if (monto > (cuentaSeleccionada.saldo || 0)) {
-      if (
-        !window.confirm(
-          'El abono es mayor que la deuda actual. ¿Deseas dejar la cuenta en saldo 0?'
-        )
-      ) {
-        return;
+    const cuentaOriginal = cuentasResumen.find(c => c.id === editandoCliente);
+    editarCuentaMutation.mutate({
+      id: editandoCliente,
+      cliente: {
+        nombre: clienteEditando.nombre.trim(),
+        descripcion: clienteEditando.descripcion.trim() || null,
+        saldo: cuentaOriginal?.saldo || 0
       }
-    }
-
-    try {
-      const res = await axios.post(
-        `/api/cuentas/${cuentaSeleccionada.id}/abonar`,
-        null,
-        { params: { monto } }
-      );
-
-      alert(
-        `✅ Abono de ${formatMoney(monto)} registrado. Nuevo saldo: ${formatMoney(
-          res.data.saldo || 0
-        )}`
-      );
-
-      setCuentaSeleccionada(res.data);
-      setMontoAbono('');
-
-      await queryClient.invalidateQueries({ queryKey: ['cuentas-gestion'] });
-      await queryClient.invalidateQueries({
-        queryKey: ['cuentas-reporte-deudas'],
-      });
-      await queryClient.invalidateQueries({ queryKey: ['abonos-cuentas'] });
-    } catch (e) {
-      console.error(e);
-      alert('❌ Error al registrar abono');
-    }
+    });
   };
 
-  // Guardar cambios de nombre / descripción
-  const guardarCambiosCuenta = async () => {
-    if (!cuentaSeleccionada) {
-      alert('Selecciona una cuenta primero');
-      return;
-    }
-
-    const body = {
-      ...cuentaSeleccionada,
-      nombre: nombreEdit.trim() || cuentaSeleccionada.nombre,
-      descripcion: descripcionEdit || null,
-    };
-
-    try {
-      const res = await axios.put(
-        `/api/cuentas/${cuentaSeleccionada.id}`,
-        body
-      );
-      alert('✅ Cuenta actualizada correctamente');
-      setCuentaSeleccionada(res.data);
-      await queryClient.invalidateQueries({ queryKey: ['cuentas-gestion'] });
-      await queryClient.invalidateQueries({
-        queryKey: ['cuentas-reporte-deudas'],
-      });
-    } catch (err) {
-      console.error(err);
-      alert('❌ Error al actualizar la cuenta');
-    }
+  const handleCancelarEdicion = () => {
+    setEditandoCliente(null);
+    setClienteEditando({ nombre: '', descripcion: '' });
   };
 
-  const limpiarSeleccion = () => {
-    setCuentaSeleccionada(null);
-    setNombreEdit('');
-    setDescripcionEdit('');
-    setMontoAbono('');
-  };
+  // Transformar productos del JSON
+  const productosTabla = useMemo(() => {
+    if (!detalleVenta || !Array.isArray(detalleVenta)) return [];
+    return detalleVenta.map(item => ({
+      id: item.id,
+      nombre: item.producto?.descripcion || 'N/A',
+      codigo: item.producto?.codigo || '',
+      cantidad: item.cantidad || 0,
+      precioUnitario: item.precioUnitario || 0,
+      importe: item.importe || 0,
+      subtotal: item.costoTotal || (item.cantidad * item.precioUnitario) || 0
+    }));
+  }, [detalleVenta]);
 
-  if (isLoading) return <div className="fs-6">Cargando cuentas...</div>;
-  if (error)
-    return (
-      <div className="text-danger fs-6">Error al cargar cuentas</div>
-    );
-
-  const cuentasConDeuda = cuentas.filter((c) => (c.saldo || 0) > 0).length;
+  if (isLoading) return <div className="fs-6 text-center py-5">Cargando...</div>;
+  if (error) return <div className="text-danger fs-6 text-center py-5">Error: {error.message}</div>;
 
   return (
     <div className="d-flex justify-content-center">
-      <div
-        className="card shadow-sm w-100 fs-6"
-        style={{
-          maxWidth: 'calc(100vw - 100px)',
-          marginTop: '1.5rem',
-          marginBottom: '2rem',
-        }}
-      >
-        {/* Encabezado general azul */}
-        <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
+      <div className="card shadow-sm fs-6 w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '1.5rem 0' }}>
+        <div className="card-header py-3 d-flex justify-content-between align-items-center bg-primary text-white">
           <div>
-            <h5 className="mb-0">Cuentas de clientes</h5>
-            <small className="text-white-50">
-              Administra cuentas por cobrar y registra abonos
+            <h5 className="mb-0">💰 Cuentas por Cobrar</h5>
+            <small>
+              {totals.clientes} cliente{totals.clientes !== 1 ? 's' : ''} | 
+              {formatMoney(totals.saldoTotal)} pendiente
+              {soloDeudores && <span className="badge bg-danger ms-2">Solo Deudores</span>}
             </small>
           </div>
-          <div className="text-end">
-            <div>
-              Cuentas: <strong>{cuentas.length}</strong>
-            </div>
-            <div>
-              Con deuda:{' '}
-              <strong className="text-warning">{cuentasConDeuda}</strong>
-            </div>
-            <div className="text-warning fw-semibold">
-              Total adeudado: {formatMoney(totalDeuda)}
-            </div>
-          </div>
+          <button 
+            className="btn btn-success btn-sm fw-bold shadow-sm"
+            onClick={() => setMostrarNuevoCliente(true)}
+          >
+            <i className="bi bi-plus-circle-fill me-1"/>Nuevo Cliente
+          </button>
         </div>
 
-        <div className="card-body py-3 bg-body">
-          <div className="row g-3">
-            {/* Alta de cuenta */}
-            <div className="col-lg-5 border-end">
-              <h6 className="mb-2">Nueva cuenta de cliente</h6>
-              <form onSubmit={handleSubmit} className="row g-3">
-                <div className="col-12">
-                  <label className="form-label mb-1">Nombre del cliente</label>
-                  <input
-                    type="text"
-                    name="nombre"
-                    className="form-control form-control-sm"
-                    value={form.nombre}
-                    onChange={handleChange}
-                    placeholder="Ej. Juan Pérez"
-                    required
-                  />
-                </div>
-
-                <div className="col-md-6">
-                  <label className="form-label mb-1">
-                    Saldo inicial (fiado)
-                  </label>
-                  <div className="input-group input-group-sm">
-                    <span className="input-group-text">$</span>
-                    <input
-                      type="number"
-                      name="saldo"
-                      className="form-control"
-                      step="0.01"
-                      min="0"
-                      value={form.saldo}
-                      onChange={handleChange}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <div className="form-text">
-                    Usualmente 0; aumentará cuando vendas a crédito.
-                  </div>
-                </div>
-
-                <div className="col-md-6">
-                  <label className="form-label mb-1">Notas</label>
-                  <textarea
-                    name="descripcion"
-                    className="form-control form-control-sm"
-                    rows={2}
-                    value={form.descripcion}
-                    onChange={handleChange}
-                    placeholder="Ej. Cliente frecuente, paga cada quincena..."
-                  />
-                </div>
-
-                <div className="col-12 d-flex justify-content-end gap-2 mt-2">
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-secondary"
-                    onClick={() => setForm(estadoInicial)}
-                    disabled={guardando}
-                  >
-                    Limpiar
-                  </button>
-                  <button
-                    type="submit"
-                    className="btn btn-sm btn-success"
-                    disabled={guardando}
-                  >
-                    {guardando ? 'Guardando...' : 'Guardar cuenta'}
-                  </button>
-                </div>
-              </form>
-            </div>
-
-            {/* Listado, edición, abonos y detalle */}
-            <div className="col-lg-7">
-              {/* Lista de cuentas */}
-              <div className="card shadow-sm mb-3">
-                <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
-                  <h6 className="mb-0">Cuentas y saldos</h6>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-light"
-                    onClick={limpiarSeleccion}
-                    disabled={!cuentaSeleccionada}
-                  >
-                    Quitar selección
-                  </button>
-                </div>
-                <div className="card-body py-2 bg-body">
-                  <div className="row g-2 align-items-end mb-2">
-                    <div className="col-md-7">
-                      <label className="form-label mb-1">Buscar cuenta</label>
-                      <input
-                        type="text"
-                        className="form-control form-control-sm"
-                        placeholder="ID, nombre o descripción..."
-                        value={busqueda}
-                        onChange={(e) => setBusqueda(e.target.value)}
-                      />
-                    </div>
-                    <div className="col small text-body-primary">
-                      {cuentasFiltradas.length} cuentas listadas · Deuda en
-                      vista:{' '}
-                      <span className="fw-semibold text-danger">
-                        {formatMoney(totalDeuda)}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div
-                    className="border rounded small bg-body"
-                    style={{ maxHeight: 210, overflowY: 'auto' }}
-                  >
-                    <table className="table table-sm table-hover table-striped mb-0 align-middle">
-                      <thead className="sticky-top">
-                        <tr>
-                          <th
-                            style={{ width: 60, cursor: 'pointer' }}
-                            onClick={() => handleSort('id')}
-                          >
-                            ID
-                            {renderSortIcon('id')}
-                          </th>
-                          <th
-                            style={{ cursor: 'pointer' }}
-                            onClick={() => handleSort('nombre')}
-                          >
-                            Cliente
-                            {renderSortIcon('nombre')}
-                          </th>
-                          <th
-                            className="text-end"
-                            style={{ width: 110, cursor: 'pointer' }}
-                            onClick={() => handleSort('saldo')}
-                          >
-                            Saldo
-                            {renderSortIcon('saldo')}
-                          </th>
-                          <th
-                            style={{ cursor: 'pointer' }}
-                            onClick={() => handleSort('descripcion')}
-                          >
-                            Notas
-                            {renderSortIcon('descripcion')}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {cuentasFiltradas.map((c) => (
-                          <tr
-                            key={c.id}
-                            style={{ cursor: 'pointer' }}
-                            className={
-                              cuentaSeleccionada?.id === c.id
-                                ? 'table-primary'
-                                : ''
-                            }
-                            onClick={() => {
-                              setCuentaSeleccionada(c);
-                              setNombreEdit(c.nombre || '');
-                              setDescripcionEdit(c.descripcion || '');
-                            }}
-                          >
-                            <td className="small text-body-primary">
-                              {c.id}
-                            </td>
-                            <td className="small">
-                              <div className="fw-semibold">{c.nombre}</div>
-                            </td>
-                            <td className="text-end">
-                              <span
-                                className={
-                                  (c.saldo || 0) > 0
-                                    ? 'badge bg-danger-subtle text-danger fw-semibold'
-                                    : 'badge bg-success-subtle text-success'
-                                }
-                              >
-                                {formatMoney(c.saldo || 0)}
-                              </span>
-                            </td>
-                            <td
-                              className="small text-truncate text-body-primary"
-                              style={{ maxWidth: 220 }}
-                            >
-                              {c.descripcion}
-                            </td>
-                          </tr>
-                        ))}
-
-                        {cuentasFiltradas.length === 0 && (
-                          <tr>
-                            <td
-                              colSpan={4}
-                              className="text-center text-body-primary py-3"
-                            >
-                              No hay cuentas que coincidan con la búsqueda.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-
-              {/* Toggle de edición de datos del cliente */}
-              <div className="form-check form-switch mb-2">
+        {/* ✅ FORMULARIO NUEVO CLIENTE */}
+        {mostrarNuevoCliente && (
+          <div className="card-header bg-success-subtle border-bottom py-3">
+            <div className="row g-3 align-items-end">
+              <div className="col-lg-4 col-md-5">
+                <label className="form-label fw-semibold mb-1 small">Nombre del cliente *</label>
                 <input
-                  className="form-check-input"
-                  type="checkbox"
-                  id="toggleEdicionCliente"
-                  checked={mostrarEdicionCliente}
-                  onChange={(e) => setMostrarEdicionCliente(e.target.checked)}
+                  type="text"
+                  className="form-control form-control-lg"
+                  placeholder="Ej: Juan Pérez"
+                  value={nuevoCliente.nombre}
+                  onChange={(e) => setNuevoCliente({...nuevoCliente, nombre: e.target.value})}
+                  autoFocus
                 />
-                <label
-                  className="form-check-label small"
-                  htmlFor="toggleEdicionCliente"
-                >
-                  Editar datos del cliente
-                </label>
               </div>
-
-              {/* Panel de edición de datos del cliente */}
-              {mostrarEdicionCliente && (
-                <div className="card shadow-sm mb-3">
-                  <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
-                    <h6 className="mb-0">Editar datos del cliente</h6>
-                  </div>
-                  <div className="card-body py-2 bg-body">
-                    {cuentaSeleccionada ? (
+              <div className="col-lg-5 col-md-4">
+                <label className="form-label fw-semibold mb-1 small">Descripción (opcional)</label>
+                <input
+                  type="text"
+                  className="form-control form-control-lg"
+                  placeholder="Teléfono, dirección, notas..."
+                  value={nuevoCliente.descripcion}
+                  onChange={(e) => setNuevoCliente({...nuevoCliente, descripcion: e.target.value})}
+                />
+              </div>
+              <div className="col-lg-3 col-md-3">
+                <div className="d-grid gap-2 h-100">
+                  <button 
+                    className="btn btn-success h-100 fw-bold shadow-sm"
+                    onClick={handleCrearCliente}
+                    disabled={nuevaCuentaMutation.isPending || !nuevoCliente.nombre.trim()}
+                  >
+                    {nuevaCuentaMutation.isPending ? (
                       <>
-                        <div className="mb-2">
-                          <label className="form-label mb-1">Nombre</label>
-                          <input
-                            type="text"
-                            className="form-control form-control-sm"
-                            value={nombreEdit}
-                            onChange={(e) => setNombreEdit(e.target.value)}
-                          />
-                        </div>
-                        <div className="mb-2">
-                          <label className="form-label mb-1">
-                            Descripción / notas
-                          </label>
-                          <textarea
-                            className="form-control form-control-sm"
-                            rows={2}
-                            value={descripcionEdit}
-                            onChange={(e) =>
-                              setDescripcionEdit(e.target.value)
-                            }
-                          />
-                        </div>
-                        <div className="d-flex justify-content-between">
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-secondary"
-                            onClick={limpiarSeleccion}
-                          >
-                            Cancelar / quitar selección
-                          </button>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-warning"
-                            onClick={guardarCambiosCuenta}
-                          >
-                            Guardar cambios
-                          </button>
-                        </div>
+                        <span className="spinner-border spinner-border-sm me-2" role="status"/>
+                        Creando...
                       </>
                     ) : (
-                      <div className="small text-body-primary">
-                        Selecciona una cuenta de la tabla para editar nombre y
-                        notas.
-                      </div>
+                      <>
+                        <i className="bi bi-check-circle-fill me-1"/>Crear Cliente
+                      </>
                     )}
-                  </div>
+                  </button>
+                  <button 
+                    className="btn btn-outline-secondary btn-sm"
+                    onClick={() => {
+                      setMostrarNuevoCliente(false);
+                      setNuevoCliente({ nombre: '', descripcion: '' });
+                    }}
+                  >
+                    <i className="bi bi-x"/>Cancelar
+                  </button>
                 </div>
-              )}
+              </div>
+            </div>
+            <div className="mt-2 small text-success">
+              <i className="bi bi-info-circle me-1"/>Saldo inicial: $0.00 (se actualizará con ventas)
+            </div>
+          </div>
+        )}
 
-              {/* Panel de abono */}
-              <div className="card shadow-sm mb-3">
-                <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
-                  <h6 className="mb-0">Registrar abono</h6>
+        <div className="card-body py-3">
+          {/* KPIs */}
+          <div className="row g-3 mb-4">
+            <div className="col-md-6">
+              <div className="border rounded p-3 bg-light">
+                <div className="small text-body-secondary">Total Clientes</div>
+                <div className="fs-4 fw-bold text-primary">{totals.clientes}</div>
+              </div>
+            </div>
+            <div className="col-md-6">
+              <div className="border rounded p-3">
+                <div className="small text-body-secondary">Saldo Total</div>
+                <div className={`fs-4 fw-bold ${totals.saldoTotal > 0 ? 'text-danger' : 'text-success'}`}>
+                  {formatMoney(totals.saldoTotal)}
                 </div>
-                <div className="card-body py-2 bg-body">
-                  {cuentaSeleccionada ? (
+              </div>
+            </div>
+          </div>
+
+          {/* FILTROS */}
+          <div className="border rounded p-3 mb-4 bg-body-tertiary">
+            <div className="row g-3 align-items-end">
+              <div className="col-md-5">
+                <label className="form-label mb-1 small fw-semibold">🔍 Buscar cliente</label>
+                <input
+                  type="text" 
+                  className="form-control form-control-lg"
+                  placeholder="Nombre o descripción..."
+                  value={busqueda}
+                  onChange={(e) => setBusqueda(e.target.value)}
+                />
+              </div>
+              <div className="col-md-4">
+                <label className="form-label mb-1 small fw-semibold">Filas por página</label>
+                <select 
+                  className="form-select" 
+                  value={pageSize} 
+                  onChange={(e) => setPageSize(parseInt(e.target.value))}
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+              <div className="col-md-3 d-flex align-items-end">
+                <button
+                  className={`btn w-100 py-2 ${soloDeudores ? 'btn-danger' : 'btn-outline-danger'}`}
+                  onClick={() => setSoloDeudores(!soloDeudores)}
+                >
+                  {soloDeudores ? (
                     <>
-                      <div className="small mb-2 text-body-primary">
-                        <div>
-                          <strong>Cuenta:</strong> {cuentaSeleccionada.nombre}{' '}
-                          (ID {cuentaSeleccionada.id})
-                        </div>
-                        <div>
-                          <strong>Saldo actual:</strong>{' '}
-                          <span className="text-danger fw-semibold">
-                            {formatMoney(cuentaSeleccionada.saldo || 0)}
-                          </span>
-                        </div>
-                      </div>
+                      <i className="bi bi-people-fill me-1"/>Mostrar Todos
+                    </>
+                  ) : (
+                    <>
+                      <i className="bi bi-exclamation-triangle-fill me-1"/>Solo Deudores
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+            {soloDeudores && (
+              <div className="mt-2 p-2 bg-danger-subtle border rounded small">
+                <i className="bi bi-info-circle me-1"/> Mostrando {totals.clientes} deudor{totals.clientes !== 1 ? 'es' : ''} con saldo mayor a $0
+              </div>
+            )}
+          </div>
 
-                      <div className="row g-2 align-items-end">
-                        <div className="col-md-5">
-                          <label className="form-label mb-1">
-                            Monto a abonar
-                          </label>
-                          <div className="input-group input-group-sm">
-                            <span className="input-group-text">$</span>
+          {/* ✅ TABLA CON EDICIÓN INLINE Y BOTONES VERTICALES */}
+          <div className="card mb-4 shadow-sm">
+            <div className="card-header py-2 bg-light d-flex justify-content-between align-items-center">
+              <h6 className="mb-0">
+                <i className="bi bi-list-ul me-2"/>Resumen por Cliente
+                <span className="badge bg-secondary ms-2">{datosFiltrados.length}</span>
+              </h6>
+            </div>
+            <div className="card-body p-0" style={{ maxHeight: '400px', overflow: 'auto' }}>
+              <DataTable
+                columns={[
+                  {
+                    id: 'nombre', 
+                    header: 'Cliente', 
+                    sortable: true, 
+                    filterable: true,
+                    render: (c) => (
+                      <div style={{ minHeight: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        {editandoCliente === c.id ? (
+                          <div className="d-flex flex-column gap-1">
                             <input
-                              type="number"
-                              min="0"
-                              step="0.01"
-                              className="form-control"
-                              value={montoAbono}
+                              type="text"
+                              className="form-control form-control-sm"
+                              style={{ height: '24px', fontSize: '0.8rem' }}
+                              placeholder="Nombre *"
+                              value={clienteEditando.nombre}
+                              onChange={(e) => setClienteEditando({...clienteEditando, nombre: e.target.value})}
+                              autoFocus
+                            />
+                            <input
+                              type="text"
+                              className="form-control form-control-sm"
+                              style={{ height: '22px', fontSize: '0.8rem' }}
+                              placeholder="Descripción"
+                              value={clienteEditando.descripcion}
+                              onChange={(e) => setClienteEditando({...clienteEditando, descripcion: e.target.value})}
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="fw-semibold" style={{ fontSize: '0.9rem' }}>{c.nombre}</div>
+                            {c.descripcion && <small className="text-body-secondary">{c.descripcion}</small>}
+                          </>
+                        )}
+                      </div>
+                    )
+                  },
+                  { id: 'totalVentas', header: 'Ventas', width: 80, align: 'center', sortable: true },
+                  {
+                    id: 'totalFacturado', 
+                    header: 'Vendido 💵', 
+                    width: 130, 
+                    align: 'right', 
+                    sortable: true,
+                    render: (c) => <div className="fw-semibold text-success">{formatMoney(c.totalFacturado)}</div>
+                  },
+                  {
+                    id: 'totalPagado', 
+                    header: 'Pagado 💳', 
+                    width: 130, 
+                    align: 'right', 
+                    sortable: true,
+                    render: (c) => <div className="fw-semibold text-primary">{formatMoney(c.totalPagado)}</div>
+                  },
+                  {
+                    id: 'saldo', 
+                    header: 'Saldo ⚖️', 
+                    width: 130, 
+                    align: 'right', 
+                    sortable: true,
+                    render: (c) => (
+                      <div className={`fw-bold fs-6 ${c.saldo > 0 ? 'text-danger' : 'text-success'}`}>
+                        {formatMoney(c.saldo)}
+                      </div>
+                    )
+                  },
+                  {
+                    id: 'acciones',
+                    header: 'Acciones',
+                    width: 110,
+                    align: 'center',
+                    render: (c) => (
+                      <div className="d-flex flex-column gap-1 h-100 justify-content-center p-1">
+                        {editandoCliente === c.id ? (
+                          <>
+                            <button
+                              className="btn btn-success btn-sm flex-fill py-1"
+                              style={{ minHeight: '28px', fontSize: '0.75rem' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleGuardarEdicion();
+                              }}
+                              disabled={editarCuentaMutation.isPending || !clienteEditando.nombre.trim()}
+                              title="Guardar cambios"
+                            >
+                              {editarCuentaMutation.isPending ? (
+                                <span className="spinner-border spinner-border-sm me-1"/>
+                              ) : (
+                                <i className="bi bi-check-lg me-1"/>
+                              )}
+                              Guardar
+                            </button>
+                            <button
+                              className="btn btn-secondary btn-sm flex-fill py-1"
+                              style={{ minHeight: '28px', fontSize: '0.75rem' }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCancelarEdicion();
+                              }}
+                              title="Cancelar"
+                            >
+                              <i className="bi bi-x me-1"/>
+                              Cancelar
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            className="btn btn-outline-primary btn-sm w-100 py-1"
+                            style={{ minHeight: '32px', fontSize: '0.8rem' }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditarCliente(c);
+                            }}
+                            title="Editar cliente"
+                          >
+                            <i className="bi bi-pencil me-1"/>
+                            Editar
+                          </button>
+                        )}
+                      </div>
+                    )
+                  }
+                ]}
+                data={datosFiltrados}
+                initialSort={{ id: 'saldo', direction: 'desc' }}
+                pageSize={pageSize}
+                getRowKey={(c) => c.id}
+                onRowClick={(c) => {
+                  if (editandoCliente !== c.id) {
+                    setCuentaExpandida(cuentaExpandida?.id === c.id ? null : c);
+                  }
+                }}
+                selectedRowKey={cuentaExpandida?.id}
+              />
+            </div>
+          </div>
+
+          {/* Detalle Cuenta */}
+          {cuentaExpandida && (
+            <div className="card mt-4 shadow-sm">
+              <div className="card-header d-flex justify-content-between align-items-center bg-light">
+                <h6>
+                  👤 {cuentaExpandida.nombre} 
+                  <span className={`badge ms-2 fs-6 fw-semibold ${cuentaExpandida.saldo > 0 ? 'bg-danger' : 'bg-success'}`}>
+                    {formatMoney(cuentaExpandida.saldo)}
+                  </span>
+                </h6>
+                <button className="btn btn-sm btn-outline-secondary" onClick={() => setCuentaExpandida(null)}>
+                  <i className="bi bi-x-circle"/>Cerrar
+                </button>
+              </div>
+              
+              <div className="card-body p-0">
+                {loadingDetalle ? (
+                  <div className="p-4 text-center">
+                    <div className="spinner-border spinner-border-sm me-2" role="status"/>
+                    <span>Cargando detalles...</span>
+                  </div>
+                ) : detalleCuenta ? (
+                  <>
+                    {/* Form Abono */}
+                    {cuentaExpandida.saldo > 0 && (
+                      <div className="p-4 bg-warning bg-opacity-10 border-bottom">
+                        <h6 className="mb-3">
+                          <i className="bi bi-cash-coin text-warning me-2"/>Nuevo Abono
+                        </h6>
+                        <div className="row g-3">
+                          <div className="col-md-5">
+                            <input
+                              type="number" 
+                              className="form-control form-control-lg"
+                              placeholder="0.00" 
+                              step="0.01" 
+                              min="0.01" 
+                              max={cuentaExpandida.saldo}
+                              value={montoAbono} 
                               onChange={(e) => setMontoAbono(e.target.value)}
                             />
                           </div>
-                        </div>
-                        <div className="col-md-4 small text-body-primary">
-                          <div className="mb-1">
-                            <strong>Saldo después del abono:</strong>{' '}
-                            {montoAbono
-                              ? (() => {
-                                  const saldo = Number(
-                                    cuentaSeleccionada.saldo || 0
-                                  );
-                                  const m = Number(montoAbono) || 0;
-                                  const nuevo = Math.max(saldo - m, 0);
-                                  return formatMoney(nuevo);
-                                })()
-                              : '—'}
+                          <div className="col-md-4">
+                            <small className="text-muted">Máximo: {formatMoney(cuentaExpandida.saldo)}</small>
+                          </div>
+                          <div className="col-md-3">
+                            <button 
+                              className="btn btn-warning w-100 h-100 py-3 fw-bold" 
+                              onClick={handleAbono} 
+                              disabled={!montoAbono || abonoMutation.isPending}
+                            >
+                              {abonoMutation.isPending ? (
+                                <>
+                                  <span className="spinner-border spinner-border-sm me-2"/>
+                                  Registrando...
+                                </>
+                              ) : (
+                                <>
+                                  <i className="bi bi-check-circle-fill me-2"/>Registrar Abono
+                                </>
+                              )}
+                            </button>
                           </div>
                         </div>
-                        <div className="col-md-3 d-flex justify-content-end">
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-success"
-                            onClick={realizarAbono}
-                          >
-                            Registrar abono
-                          </button>
-                        </div>
                       </div>
-                    </>
-                  ) : (
-                    <div className="small text-body-primary">
-                      Selecciona una cuenta de la tabla para registrar un abono.
-                    </div>
-                  )}
-                </div>
-              </div>
+                    )}
 
-              {/* Historial de cuenta seleccionada */}
-              <div className="card shadow-sm">
-                <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
-                  <h6 className="mb-0">Historial de movimientos</h6>
-                </div>
-                <div className="card-body py-2 bg-body">
-                  {!cuentaSeleccionada && (
-                    <div className="small text-body-primary">
-                      Selecciona una cuenta para ver sus abonos y ventas a
-                      crédito.
-                    </div>
-                  )}
-
-                  {cuentaSeleccionada && (
-                    <>
-                      <div className="small mb-2 text-body-primary">
-                        <strong>Cuenta:</strong> {cuentaSeleccionada.nombre} (ID{' '}
-                        {cuentaSeleccionada.id}) ·{' '}
-                        <strong>Saldo actual:</strong>{' '}
-                        <span className="text-danger fw-semibold">
-                          {formatMoney(cuentaSeleccionada.saldo || 0)}
-                        </span>
-                      </div>
-
+                    <div className="p-4">
                       {/* Abonos */}
-                      <div className="mb-2">
-                        <h6 className="small fw-bold">Abonos</h6>
-                        <div
-                          className="border rounded bg-body"
-                          style={{ maxHeight: 130, overflowY: 'auto' }}
-                        >
-                          <table className="table table-sm table-striped mb-0 align-middle fs-6">
-                            <thead className="sticky-top">
-                              <tr>
-                                <th style={{ width: 160 }}>Fecha</th>
-                                <th className="text-end" style={{ width: 90 }}>
-                                  Cantidad
-                                </th>
-                                <th className="text-end" style={{ width: 90 }}>
-                                  Viejo
-                                </th>
-                                <th className="text-end" style={{ width: 90 }}>
-                                  Nuevo
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {abonosDeCuenta.map((a) => (
-                                <tr key={a.id}>
-                                  <td className="small text-body-primary">
-                                    {formatFecha(a.fecha)}
-                                  </td>
-                                  <td className="text-end text-success">
-                                    {formatMoney(a.cantidad || 0)}
-                                  </td>
-                                  <td className="text-end small">
-                                    {formatMoney(a.viejoSaldo || 0)}
-                                  </td>
-                                  <td className="text-end small">
-                                    {formatMoney(a.nuevoSaldo || 0)}
-                                  </td>
-                                </tr>
-                              ))}
-
-                              {abonosDeCuenta.length === 0 && (
+                      {detalleCuenta.ultimosAbonos?.length > 0 ? (
+                        <div className="mb-4">
+                          <div className="d-flex justify-content-between align-items-center mb-3">
+                            <h6>
+                              <i className="bi bi-receipt me-2"/>Últimos Abonos 
+                              <span className="badge bg-info ms-2">{detalleCuenta.ultimosAbonos.length}</span>
+                            </h6>
+                          </div>
+                          <div className="table-responsive" style={{maxHeight: '250px', overflow: 'auto'}}>
+                            <table className="table table-sm table-hover">
+                              <thead className="table-light">
                                 <tr>
-                                  <td
-                                    colSpan={4}
-                                    className="text-center text-body-primary py-2 small"
-                                  >
-                                    Sin abonos registrados para esta cuenta.
-                                  </td>
+                                  <th>Monto</th>
+                                  <th>Antes</th>
+                                  <th>Después</th>
+                                  <th>Fecha</th>
                                 </tr>
-                              )}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody>
+                                {detalleCuenta.ultimosAbonos.slice(0, pageSize).map(abono => (
+                                  <tr key={abono.id}>
+                                    <td className="fw-bold text-success">{formatMoney(abono.cantidad)}</td>
+                                    <td>{formatMoney(abono.viejoSaldo)}</td>
+                                    <td className="fw-bold text-primary">{formatMoney(abono.nuevoSaldo)}</td>
+                                    <td><small className="text-muted">{formatFecha(abono.fecha)}</small></td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
-                      </div>
+                      ) : (
+                        <div className="alert alert-info mb-4">
+                          <i className="bi bi-info-circle me-2"/>Sin abonos registrados
+                        </div>
+                      )}
 
                       {/* Ventas */}
-                      <div>
-                        <h6 className="small fw-bold">Ventas a crédito</h6>
-                        <div
-                          className="border rounded bg-body"
-                          style={{ maxHeight: 130, overflowY: 'auto' }}
-                        >
-                          <table className="table table-sm table-striped mb-0 align-middle fs-6">
-                            <thead className="sticky-top">
-                              <tr>
-                                <th style={{ width: 70 }}>Venta</th>
-                                <th style={{ width: 150 }}>Fecha</th>
-                                <th
-                                  className="text-end"
-                                  style={{ width: 100 }}
-                                >
-                                  Total
-                                </th>
-                                <th style={{ width: 90 }}>Estado</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {ventasDeCuenta.map((v) => (
-                                <tr key={v.id}>
-                                  <td className="small text-body-primary">
-                                    {v.id}
-                                  </td>
-                                  <td className="small text-body-primary">
-                                    {formatFecha(v.fecha)}
-                                  </td>
-                                  <td className="text-end fw-semibold">
-                                    {formatMoney(v.total || 0)}
-                                  </td>
-                                  <td className="small text-body-primary">
-                                    {v.status}
-                                  </td>
-                                </tr>
-                              ))}
-
-                              {ventasDeCuenta.length === 0 && (
+                      {detalleCuenta.ultimasVentas?.length > 0 ? (
+                        <div>
+                          <div className="d-flex justify-content-between align-items-center mb-3">
+                            <h6>
+                              <i className="bi bi-cart me-2"/>Últimas Ventas 
+                              <span className="badge bg-primary ms-2">{detalleCuenta.ultimasVentas.length}</span>
+                            </h6>
+                          </div>
+                          <div className="table-responsive" style={{maxHeight: '300px', overflow: 'auto'}}>
+                            <table className="table table-sm table-hover">
+                              <thead className="table-light">
                                 <tr>
-                                  <td
-                                    colSpan={4}
-                                    className="text-center text-body-primary py-2 small"
-                                  >
-                                    Sin ventas asociadas a esta cuenta.
-                                  </td>
+                                  <th>#</th>
+                                  <th>Total</th>
+                                  <th>Status</th>
+                                  <th>Fecha</th>
                                 </tr>
-                              )}
-                            </tbody>
-                          </table>
+                              </thead>
+                              <tbody>
+                                {detalleCuenta.ultimasVentas.slice(0, pageSize).map(venta => (
+                                  <tr 
+                                    key={venta.id} 
+                                    className={ventaSeleccionada?.id === venta.id ? 'table-active' : ''}
+                                    style={{cursor: 'pointer'}}
+                                    onClick={() => setVentaSeleccionada(ventaSeleccionada?.id === venta.id ? null : venta)}
+                                  >
+                                    <td className="fw-semibold">#{venta.ventaId}</td>
+                                    <td className="text-end fw-bold text-success">{formatMoney(venta.totalVenta)}</td>
+                                    <td>
+                                      <span className={`badge fs-6 px-2 py-1 fw-semibold ${
+                                        venta.status === 'COMPLETADA' ? 'bg-success' : 
+                                        venta.status === 'PRESTAMO' ? 'bg-warning text-dark' : 
+                                        'bg-secondary'
+                                      }`}>
+                                        {venta.status}
+                                      </span>
+                                    </td>
+                                    <td><small className="text-muted">{formatFecha(venta.fecha)}</small></td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
-                      </div>
-                    </>
-                  )}
-                </div>
+                      ) : (
+                        <div className="alert alert-info">
+                          <i className="bi bi-info-circle me-2"/>Sin ventas registradas
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="p-4 text-center text-muted">
+                    No se pudo cargar el detalle de la cuenta
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* DETALLE PRODUCTOS */}
+          {ventaSeleccionada && (
+            <div className="card mt-4 shadow-sm">
+              <div className="card-header d-flex justify-content-between align-items-center bg-light">
+                <h6>
+                  📦 Productos Venta #{ventaSeleccionada.ventaId} 
+                  <span className="badge bg-success ms-2 fs-6">{formatMoney(ventaSeleccionada.totalVenta)}</span>
+                </h6>
+                <button 
+                  className="btn btn-sm btn-outline-secondary" 
+                  onClick={() => setVentaSeleccionada(null)}
+                >
+                  <i className="bi bi-x-circle"/>Cerrar
+                </button>
+              </div>
+              <div className="card-body p-0">
+                {loadingVenta ? (
+                  <div className="p-4 text-center">
+                    <div className="spinner-border spinner-border-sm me-2" role="status"/>
+                    Cargando productos...
+                  </div>
+                ) : productosTabla.length > 0 ? (
+                  <div className="table-responsive" style={{maxHeight: '400px', overflow: 'auto'}}>
+                    <table className="table table-sm table-hover">
+                      <thead className="table-light sticky-top">
+                        <tr>
+                          <th width="90">Código</th>
+                          <th>Producto</th>
+                          <th className="text-center" width="70">Cant.</th>
+                          <th className="text-end" width="100">P/U</th>
+                          <th className="text-end" width="120">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {productosTabla.slice(0, pageSize).map(producto => (
+                          <tr key={producto.id}>
+                            <td><small className="text-muted">{producto.codigo}</small></td>
+                            <td className="pe-2">{producto.nombre}</td>
+                            <td className="text-center fw-bold">{producto.cantidad}</td>
+                            <td className="text-end small">{formatMoney(producto.precioUnitario)}</td>
+                            <td className="text-end fw-bold text-success fs-6">
+                              {formatMoney(producto.subtotal)}
+                            </td>
+                          </tr>
+                        ))}
+                        <tr className="table-group-divider">
+                          <td colSpan={4} className="text-end fw-bold fs-5 text-primary">TOTAL VENTA:</td>
+                          <td className="text-end fs-4 fw-bold text-success">
+                            {formatMoney(ventaSeleccionada.totalVenta)}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="p-4 text-center text-muted">
+                    No hay productos en esta venta
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div className="card-footer bg-body-tertiary py-3 text-center text-muted small">
+            <div className="row">
+              <div className="col-md-6">
+                Total clientes en sistema: {cuentasResumen?.length || 0}
+              </div>
+              <div className="col-md-6 text-md-end">
+                Última actualización: {new Date().toLocaleTimeString()}
               </div>
             </div>
           </div>
         </div>
-      </div>  
+      </div>
     </div>
   );
 }

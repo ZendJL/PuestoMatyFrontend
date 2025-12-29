@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { formatMoney, formatFecha } from '../../utils/format';
 import { imprimirTicketVenta } from '../Venta/TicketPrinter';
+import DataTable from '../common/DataTable';
 
 function formatoFechaInput(date) {
   return date.toISOString().substring(0, 10); // YYYY-MM-DD
@@ -53,6 +54,7 @@ export default function ReporteVentasGenerales() {
   const [hasta, setHasta] = useState(formatoFechaInput(dFin));
   const [busqueda, setBusqueda] = useState('');
   const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
+  const [mostrarDesglose, setMostrarDesglose] = useState(false);
 
   const { data: ventasRaw, isLoading, error } = useQuery({
     queryKey: ['ventas-reporte-generales'],
@@ -70,13 +72,11 @@ export default function ReporteVentasGenerales() {
     const dDesde = new Date(desde + 'T00:00:00');
     const dHasta = new Date(hasta + 'T23:59:59');
 
-    let lista = ventas
-      .filter((v) => {
-        if (!v.fecha) return false;
-        const f = new Date(v.fecha);
-        return f >= dDesde && f <= dHasta;
-      })
-      .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    let lista = ventas.filter((v) => {
+      if (!v.fecha) return false;
+      const f = new Date(v.fecha);
+      return f >= dDesde && f <= dHasta;
+    });
 
     const texto = busqueda.toLowerCase();
     if (texto) {
@@ -104,12 +104,15 @@ export default function ReporteVentasGenerales() {
     .filter((v) => v.status === 'PRESTAMO')
     .reduce((sum, v) => sum + (v.total || 0), 0);
 
+  // Ganancia total del período (usa costoTotal de venta_productos)
   const gananciaTotalGeneral = ventasFiltradas.reduce((acum, v) => {
     const gananciaVenta = (v.ventaProductos || []).reduce((s, vp) => {
       const precioVenta = vp.precioUnitario ?? vp.precio ?? 0;
-      const costoCompra = vp.producto?.precioCompra ?? 0;
-      const gananciaUnidad = precioVenta - costoCompra;
-      return s + (vp.cantidad || 0) * gananciaUnidad;
+      const cantidad = vp.cantidad || 0;
+      const costoTotal = vp.costoTotal ?? vp.costo_total ?? 0;
+      const costoUnitario = cantidad > 0 ? costoTotal / cantidad : 0;
+      const gananciaUnidad = precioVenta - costoUnitario;
+      return s + cantidad * gananciaUnidad;
     }, 0);
     return acum + gananciaVenta;
   }, 0);
@@ -124,6 +127,7 @@ export default function ReporteVentasGenerales() {
 
   const handleClickVenta = (venta) => {
     setVentaSeleccionada(venta);
+    setMostrarDesglose(false);
   };
 
   const reimprimirTicket = () => {
@@ -144,6 +148,18 @@ export default function ReporteVentasGenerales() {
     });
   };
 
+  // Carga del desglose por lotes cuando se pide
+  const { data: desgloseLotes = [] } = useQuery({
+    queryKey: ['costos-lotes', ventaSeleccionada?.id],
+    queryFn: async () => {
+      const res = await axios.get(
+        `/api/ventas/${ventaSeleccionada.id}/costos-lotes`
+      );
+      return res.data;
+    },
+    enabled: !!ventaSeleccionada?.id && mostrarDesglose,
+  });
+
   if (isLoading) {
     return <div className="fs-6">Cargando ventas...</div>;
   }
@@ -156,12 +172,102 @@ export default function ReporteVentasGenerales() {
     : 0;
   const pagoDetalle = ventaSeleccionada
     ? Number(
-        ventaSeleccionada.pagoCliente ??
-          ventaSeleccionada.total ??
-          0
+        ventaSeleccionada.pagoCliente ?? ventaSeleccionada.total ?? 0
       )
     : 0;
   const cambioDetalle = Math.max(pagoDetalle - totalDetalle, 0);
+
+  // Ganancia SOLO de la venta seleccionada
+  const gananciaVentaSeleccionada = ventaSeleccionada
+    ? (ventaSeleccionada.ventaProductos || []).reduce((s, vp) => {
+        const precioVenta = vp.precioUnitario ?? vp.precio ?? 0;
+        const cantidad = vp.cantidad || 0;
+        const costoTotal = vp.costoTotal ?? vp.costo_total ?? 0;
+        const costoUnitario = cantidad > 0 ? costoTotal / cantidad : 0;
+        const gananciaUnidad = precioVenta - costoUnitario;
+        return s + cantidad * gananciaUnidad;
+      }, 0)
+    : 0;
+
+  const columnasVentas = [
+    {
+      id: 'id',
+      header: 'ID',
+      style: { width: 60 },
+      accessor: (v) => v.id,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: 'ID',
+      cellClassName: 'small text-body-primary',
+      defaultSortDirection: 'desc',
+    },
+    {
+      id: 'fecha',
+      header: 'Fecha',
+      style: { width: 150 },
+      accessor: (v) => v.fecha,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: 'AAAA-MM-DD',
+      render: (v) => (v.fecha ? formatFecha(v.fecha) : ''),
+      sortFn: (a, b) => new Date(a) - new Date(b),
+      defaultSortDirection: 'desc',
+    },
+    {
+      id: 'cuenta',
+      header: 'Cuenta',
+      style: { width: 140 },
+      accessor: (v) =>
+        v.status === 'PRESTAMO'
+          ? v.cuenta?.nombre
+            ? v.cuenta.nombre
+            : v.cuentaId
+            ? `Cuenta ${v.cuentaId}`
+            : 'Préstamo'
+          : 'Contado',
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: 'Cuenta / tipo',
+      cellClassName: 'small',
+    },
+    {
+      id: 'total',
+      header: 'Total',
+      style: { width: 100 },
+      headerAlign: 'right',
+      headerClassName: 'text-end',
+      cellClassName: 'text-end fw-semibold text-success',
+      accessor: (v) => v.total || 0,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: '>= 0',
+      render: (v) => formatMoney(v.total || 0),
+      sortFn: (a, b) => (a || 0) - (b || 0),
+      defaultSortDirection: 'desc',
+    },
+    {
+      id: 'status',
+      header: 'Status',
+      style: { width: 90 },
+      accessor: (v) => v.status,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: 'PRESTAMO...',
+      headerAlign: 'center',
+      cellClassName: 'text-center',
+      render: (v) => (
+        <span
+          className={
+            v.status === 'PRESTAMO'
+              ? 'badge bg-warning text-dark'
+              : 'badge bg-success-subtle text-success-emphasis border border-success-subtle'
+          }
+        >
+          {v.status}
+        </span>
+      ),
+    },
+  ];
 
   return (
     <div className="d-flex justify-content-center">
@@ -311,83 +417,20 @@ export default function ReporteVentasGenerales() {
                 <div className="card-header py-2 d-flex justify-content-between align-items-center bg-body-tertiary">
                   <h6 className="mb-0">Ventas</h6>
                   <small className="text-body-primary">
-                    Haz clic en una fila para ver el detalle.
+                    Clic en encabezados para ordenar y usa los filtros por
+                    columna.
                   </small>
                 </div>
                 <div className="card-body p-0 bg-body">
-                  <div
-                    className="table-responsive"
-                    style={{ maxHeight: 320, overflowY: 'auto' }}
-                  >
-                    <table className="table table-sm table-hover table-striped mb-0 align-middle">
-                      <thead className="sticky-top table-light">
-                        <tr>
-                          <th style={{ width: 60 }}>ID</th>
-                          <th style={{ width: 150 }}>Fecha</th>
-                          <th style={{ width: 140 }}>Cuenta</th>
-                          <th className="text-end" style={{ width: 100 }}>
-                            Total
-                          </th>
-                          <th className="text-center" style={{ width: 90 }}>
-                            Status
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {ventasFiltradas.map((v) => (
-                          <tr
-                            key={v.id}
-                            onClick={() => handleClickVenta(v)}
-                            style={{ cursor: 'pointer' }}
-                            className={
-                              ventaSeleccionada?.id === v.id
-                                ? 'table-active'
-                                : ''
-                            }
-                          >
-                            <td className="small text-body-primary">{v.id}</td>
-                            <td className="small">
-                              {v.fecha ? formatFecha(v.fecha) : ''}
-                            </td>
-                            <td className="small">
-                              {v.status === 'PRESTAMO'
-                                ? v.cuenta?.nombre
-                                  ? v.cuenta.nombre
-                                  : v.cuentaId
-                                  ? `Cuenta ${v.cuentaId}`
-                                  : 'Préstamo'
-                                : 'Contado'}
-                            </td>
-                            <td className="text-end fw-semibold text-success">
-                              {formatMoney(v.total || 0)}
-                            </td>
-                            <td className="text-center">
-                              <span
-                                className={
-                                  v.status === 'PRESTAMO'
-                                    ? 'badge bg-warning text-dark'
-                                    : 'badge bg-success-subtle text-success-emphasis border border-success-subtle'
-                                }
-                              >
-                                {v.status}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-
-                        {ventasFiltradas.length === 0 && (
-                          <tr>
-                            <td
-                              colSpan={5}
-                              className="text-center text-body-primary py-3"
-                            >
-                              No hay ventas en el período seleccionado.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                  <DataTable
+                    columns={columnasVentas}
+                    data={ventasFiltradas}
+                    initialSort={{ id: 'fecha', direction: 'desc' }}
+                    maxHeight={320}
+                    onRowClick={handleClickVenta}
+                    getRowKey={(v) => v.id}
+                    selectedRowKey={ventaSeleccionada?.id}
+                  />
                 </div>
               </div>
             </div>
@@ -397,14 +440,28 @@ export default function ReporteVentasGenerales() {
               <div className="card h-100">
                 <div className="card-header py-2 d-flex justify-content-between align-items-center bg-body-tertiary">
                   <h6 className="mb-0">Detalle de venta</h6>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-secondary"
-                    disabled={!ventaSeleccionada}
-                    onClick={reimprimirTicket}
-                  >
-                    Reimprimir ticket
-                  </button>
+                  <div className="d-flex gap-1">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-primary"
+                      disabled={!ventaSeleccionada}
+                      onClick={() =>
+                        setMostrarDesglose((v) => !v)
+                      }
+                    >
+                      {mostrarDesglose
+                        ? 'Ocultar desglose'
+                        : 'Ver desglose costos'}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline-secondary"
+                      disabled={!ventaSeleccionada}
+                      onClick={reimprimirTicket}
+                    >
+                      Reimprimir ticket
+                    </button>
+                  </div>
                 </div>
                 <div className="card-body p-2 bg-body">
                   {!ventaSeleccionada && (
@@ -432,8 +489,12 @@ export default function ReporteVentasGenerales() {
                             : 'Contado'}
                         </div>
                         <div>
-                          <strong>Total:</strong>{' '}
+                          <strong>Total venta:</strong>{' '}
                           {formatMoney(totalDetalle)}
+                        </div>
+                        <div>
+                          <strong>Ganancia total:</strong>{' '}
+                          {formatMoney(gananciaVentaSeleccionada)}
                         </div>
                         <div>
                           <strong>Pago del cliente:</strong>{' '}
@@ -459,13 +520,10 @@ export default function ReporteVentasGenerales() {
                               <th className="text-end" style={{ width: 90 }}>
                                 P. venta
                               </th>
-                              <th className="text-end" style={{ width: 90 }}>
-                                Costo compra
+                              <th className="text-end" style={{ width: 110 }}>
+                                Ganancia producto
                               </th>
-                              <th className="text-end" style={{ width: 90 }}>
-                                Ganancia
-                              </th>
-                              <th className="text-end" style={{ width: 100 }}>
+                              <th className="text-end" style={{ width: 110 }}>
                                 Importe
                               </th>
                             </tr>
@@ -474,12 +532,17 @@ export default function ReporteVentasGenerales() {
                             {ventaSeleccionada.ventaProductos?.map((vp) => {
                               const precioVenta =
                                 vp.precioUnitario ?? vp.precio ?? 0;
-                              const costoCompra =
-                                vp.producto?.precioCompra ?? 0;
+                              const cantidad = vp.cantidad || 0;
+                              const costoTotal =
+                                vp.costoTotal ?? vp.costo_total ?? 0;
+                              const costoUnitario =
+                                cantidad > 0 ? costoTotal / cantidad : 0;
                               const gananciaUnidad =
-                                precioVenta - costoCompra;
-                              const importe =
-                                (vp.cantidad || 0) * precioVenta;
+                                precioVenta - costoUnitario;
+                              const gananciaProducto =
+                                gananciaUnidad * cantidad;
+                              const importe = cantidad * precioVenta;
+
                               return (
                                 <tr key={vp.id}>
                                   <td className="small">
@@ -490,16 +553,21 @@ export default function ReporteVentasGenerales() {
                                     </div>
                                   </td>
                                   <td className="text-center">
-                                    {vp.cantidad}
+                                    {cantidad}
                                   </td>
                                   <td className="text-end">
                                     {formatMoney(precioVenta)}
                                   </td>
                                   <td className="text-end">
-                                    {formatMoney(costoCompra)}
-                                  </td>
-                                  <td className="text-end">
-                                    {formatMoney(gananciaUnidad)}
+                                    <span
+                                      className={
+                                        gananciaProducto >= 0
+                                          ? 'text-success fw-semibold'
+                                          : 'text-danger fw-semibold'
+                                      }
+                                    >
+                                      {formatMoney(gananciaProducto)}
+                                    </span>
                                   </td>
                                   <td className="text-end fw-semibold">
                                     {formatMoney(importe)}
@@ -512,7 +580,7 @@ export default function ReporteVentasGenerales() {
                               ventaSeleccionada.ventaProductos.length === 0) && (
                               <tr>
                                 <td
-                                  colSpan={6}
+                                  colSpan={5}
                                   className="text-center text-muted py-3"
                                 >
                                   Esta venta no tiene productos asociados.
@@ -522,6 +590,98 @@ export default function ReporteVentasGenerales() {
                           </tbody>
                         </table>
                       </div>
+
+                      {mostrarDesglose && (
+                        <div className="mt-2">
+                          <div className="small fw-semibold mb-1">
+                            Desglose de costos por lotes
+                          </div>
+                          <div
+                            className="border rounded bg-body"
+                            style={{ maxHeight: 200, overflowY: 'auto' }}
+                          >
+                            <table className="table table-sm table-striped mb-0 align-middle">
+                              <thead className="table-light sticky-top">
+                                <tr>
+                                  <th>Producto</th>
+                                  <th
+                                    className="text-end"
+                                    style={{ width: 90 }}
+                                  >
+                                    Lote ID
+                                  </th>
+                                  <th
+                                    className="text-end"
+                                    style={{ width: 130 }}
+                                  >
+                                    Fecha compra
+                                  </th>
+                                  <th
+                                    className="text-end"
+                                    style={{ width: 90 }}
+                                  >
+                                    Cant.
+                                  </th>
+                                  <th
+                                    className="text-end"
+                                    style={{ width: 100 }}
+                                  >
+                                    Costo unit.
+                                  </th>
+                                  <th
+                                    className="text-end"
+                                    style={{ width: 110 }}
+                                  >
+                                    Costo total
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {desgloseLotes.map((lote, idx) => (
+                                  <tr key={idx}>
+                                    <td className="small">
+                                      {lote.productoDescripcion}
+                                    </td>
+                                    <td className="text-end">
+                                      {lote.loteId}
+                                    </td>
+                                    <td className="text-end">
+                                      {lote.fechaCompra
+                                        ? formatFecha(lote.fechaCompra)
+                                        : ''}
+                                    </td>
+                                    <td className="text-end">
+                                      {lote.cantidad}
+                                    </td>
+                                    <td className="text-end">
+                                      {formatMoney(
+                                        lote.costoUnitario || 0
+                                      )}
+                                    </td>
+                                    <td className="text-end">
+                                      {formatMoney(
+                                        lote.costoTotal || 0
+                                      )}
+                                    </td>
+                                  </tr>
+                                ))}
+
+                                {desgloseLotes.length === 0 && (
+                                  <tr>
+                                    <td
+                                      colSpan={6}
+                                      className="text-center text-muted small py-2"
+                                    >
+                                      No hay desglose de costos disponible para
+                                      esta venta.
+                                    </td>
+                                  </tr>
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>

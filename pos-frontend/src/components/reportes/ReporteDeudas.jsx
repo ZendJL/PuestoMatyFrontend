@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { formatMoney, formatFecha } from '../../utils/format';
+import DataTable from '../common/DataTable';
 
 export default function ReporteDeudas() {
   const [busqueda, setBusqueda] = useState('');
@@ -40,18 +41,15 @@ export default function ReporteDeudas() {
           ? c.nombre?.toLowerCase().includes(texto) ||
             c.descripcion?.toLowerCase().includes(texto)
           : true
-      )
-      .sort((a, b) => (b.saldo || 0) - (a.saldo || 0));
+      );
   }, [cuentas, busqueda]);
 
   const ventasDeCuenta = useMemo(() => {
     if (!cuentaSeleccionada) return [];
-    return ventas
-      .filter((v) => {
-        const idCuentaVenta = v.cuenta?.id ?? v.cuentaId;
-        return idCuentaVenta === cuentaSeleccionada.id;
-      })
-      .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+    return ventas.filter((v) => {
+      const idCuentaVenta = v.cuenta?.id ?? v.cuentaId;
+      return idCuentaVenta === cuentaSeleccionada.id;
+    });
   }, [ventas, cuentaSeleccionada]);
 
   const totalDeudores = cuentasConDeuda.length;
@@ -67,6 +65,184 @@ export default function ReporteDeudas() {
     return <div className="text-danger fs-6">Error al cargar datos</div>;
   }
 
+  const columnasCuentas = [
+    {
+      id: 'id',
+      header: 'ID',
+      style: { width: 70 },
+      accessor: (c) => c.id,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: 'ID',
+      headerAlign: 'left',
+      cellClassName: 'text-body-primary small',
+      defaultSortDirection: 'asc',
+    },
+    {
+      id: 'nombre',
+      header: 'Cliente',
+      accessor: (c) => c.nombre,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: 'Nombre',
+      render: (c) => <div className="fw-semibold">{c.nombre}</div>,
+    },
+    {
+      id: 'saldo',
+      header: 'Saldo pendiente',
+      headerAlign: 'right',
+      headerClassName: 'text-end',
+      cellClassName: 'text-end',
+      style: { width: 130 },
+      accessor: (c) => c.saldo || 0,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: '>= 0',
+      render: (c) => (
+        <span className="badge bg-danger-subtle text-danger fw-semibold">
+          {formatMoney(c.saldo || 0)}
+        </span>
+      ),
+      sortFn: (a, b) => (a || 0) - (b || 0),
+      defaultSortDirection: 'desc',
+    },
+    {
+      id: 'descripcion',
+      header: 'Notas',
+      accessor: (c) => c.descripcion || '',
+      filterable: true,
+      filterPlaceholder: 'Notas',
+      cellClassName: 'text-truncate text-body-primary small',
+      cellStyle: { maxWidth: 220 },
+    },
+  ];
+
+  const columnasVentas = [
+    {
+      id: 'id',
+      header: 'Venta',
+      style: { width: 70 },
+      accessor: (v) => v.id,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: 'ID',
+      cellClassName: 'text-body-primary small',
+    },
+    {
+      id: 'fecha',
+      header: 'Fecha',
+      style: { width: 170 },
+      accessor: (v) => v.fecha,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: 'AAAA-MM-DD',
+      render: (v) => formatFecha(v.fecha),
+      sortFn: (a, b) => new Date(a) - new Date(b),
+      defaultSortDirection: 'desc',
+    },
+    {
+      id: 'total',
+      header: 'Total',
+      style: { width: 120 },
+      headerAlign: 'right',
+      headerClassName: 'text-end',
+      cellClassName: 'text-end fw-semibold',
+      accessor: (v) => v.total || 0,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: '>= 0',
+      render: (v) => formatMoney(v.total || 0),
+      sortFn: (a, b) => (a || 0) - (b || 0),
+      defaultSortDirection: 'desc',
+    },
+    {
+      id: 'status',
+      header: 'Estado',
+      style: { width: 110 },
+      accessor: (v) => v.status,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: 'PRESTAMO...',
+      render: (v) =>
+        v.status === 'PRESTAMO' ? (
+          <span className="badge bg-warning text-dark">Préstamo</span>
+        ) : (
+          <span className="badge bg-success-subtle text-success-emphasis border border-success-subtle">
+            {v.status}
+          </span>
+        ),
+    },
+  ];
+
+  const columnasProductos = [
+    {
+      id: 'producto',
+      header: 'Producto',
+      accessor: (vp) => vp.producto?.descripcion || '',
+      filterable: true,
+      filterPlaceholder: 'Descripción',
+      render: (vp) => (
+        <>
+          {vp.producto?.descripcion || `Producto ${vp.producto?.id}`}
+          {vp.producto?.codigo && (
+            <div className="text-body-primary small">
+              Código: {vp.producto.codigo}
+            </div>
+          )}
+        </>
+      ),
+    },
+    {
+      id: 'cantidad',
+      header: 'Cantidad',
+      style: { width: 80 },
+      headerAlign: 'center',
+      cellClassName: 'text-center',
+      accessor: (vp) => vp.cantidad || 0,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: '>= 0',
+      sortFn: (a, b) => (a || 0) - (b || 0),
+      defaultSortDirection: 'desc',
+    },
+    {
+      id: 'precio',
+      header: 'Precio',
+      style: { width: 110 },
+      headerAlign: 'right',
+      headerClassName: 'text-end',
+      cellClassName: 'text-end',
+      accessor: (vp) => vp.precioUnitario ?? vp.precio ?? 0,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: '>= 0',
+      render: (vp) => formatMoney(vp.precioUnitario ?? vp.precio ?? 0),
+    },
+    {
+      id: 'importe',
+      header: 'Importe',
+      style: { width: 120 },
+      headerAlign: 'right',
+      headerClassName: 'text-end',
+      cellClassName: 'text-end fw-semibold',
+      accessor: (vp) => {
+        const precio = vp.precioUnitario ?? vp.precio ?? 0;
+        const cantidad = vp.cantidad || 0;
+        return precio * cantidad;
+      },
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: '>= 0',
+      render: (vp) => {
+        const precio = vp.precioUnitario ?? vp.precio ?? 0;
+        const cantidad = vp.cantidad || 0;
+        return formatMoney(precio * cantidad);
+      },
+      sortFn: (a, b) => (a || 0) - (b || 0),
+      defaultSortDirection: 'desc',
+    },
+  ];
+
   return (
     <div className="d-flex justify-content-center">
       <div
@@ -77,7 +253,6 @@ export default function ReporteDeudas() {
           marginBottom: '2rem',
         }}
       >
-        {/* Header azul */}
         <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
           <div>
             <h5 className="mb-0">Reporte de deudas</h5>
@@ -116,64 +291,19 @@ export default function ReporteDeudas() {
                 </div>
               </div>
 
-              <div
-                className="border rounded small bg-body"
-                style={{ maxHeight: 320, overflowY: 'auto' }}
-              >
-                <table className="table table-hover table-striped mb-0 align-middle fs-6">
-                  <thead className="sticky-top">
-                    <tr>
-                      <th style={{ width: 70 }}>ID</th>
-                      <th>Cliente</th>
-                      <th className="text-end" style={{ width: 130 }}>
-                        Saldo pendiente
-                      </th>
-                      <th>Notas</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cuentasConDeuda.map((c) => (
-                      <tr
-                        key={c.id}
-                        style={{ cursor: 'pointer' }}
-                        className={
-                          cuentaSeleccionada?.id === c.id ? 'table-primary' : ''
-                        }
-                        onClick={() => {
-                          setCuentaSeleccionada(c);
-                          setVentaSeleccionada(null);
-                        }}
-                      >
-                        <td className="text-body-primary small">{c.id}</td>
-                        <td>
-                          <div className="fw-semibold">{c.nombre}</div>
-                        </td>
-                        <td className="text-end">
-                          <span className="badge bg-danger-subtle text-danger fw-semibold">
-                            {formatMoney(c.saldo || 0)}
-                          </span>
-                        </td>
-                        <td
-                          className="text-truncate text-body-primary small"
-                          style={{ maxWidth: 220 }}
-                        >
-                          {c.descripcion}
-                        </td>
-                      </tr>
-                    ))}
-
-                    {cuentasConDeuda.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={4}
-                          className="text-center text-body-primary py-3"
-                        >
-                          No hay cuentas con deudas pendientes.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
+              <div className="border rounded small bg-body">
+                <DataTable
+                  columns={columnasCuentas}
+                  data={cuentasConDeuda}
+                  initialSort={{ id: 'saldo', direction: 'desc' }}
+                  maxHeight={320}
+                  onRowClick={(c) => {
+                    setCuentaSeleccionada(c);
+                    setVentaSeleccionada(null);
+                  }}
+                  getRowKey={(c) => c.id}
+                  selectedRowKey={cuentaSeleccionada?.id}
+                />
               </div>
             </div>
 
@@ -223,76 +353,22 @@ export default function ReporteDeudas() {
                         )}
                       </div>
 
-                      {/* Ventas a crédito */}
                       <h6 className="fw-bold mb-1">Ventas a crédito</h6>
-                      <div
-                        className="border rounded small bg-body mb-2"
-                        style={{ maxHeight: 200, overflowY: 'auto' }}
-                      >
-                        <table className="table table-sm table-striped mb-0 align-middle fs-6">
-                          <thead className="sticky-top">
-                            <tr>
-                              <th style={{ width: 70 }}>Venta</th>
-                              <th style={{ width: 170 }}>Fecha</th>
-                              <th
-                                className="text-end"
-                                style={{ width: 120 }}
-                              >
-                                Total
-                              </th>
-                              <th style={{ width: 110 }}>Estado</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {ventasDeCuenta.map((v) => (
-                              <tr
-                                key={v.id}
-                                style={{ cursor: 'pointer' }}
-                                className={
-                                  ventaSeleccionada?.id === v.id
-                                    ? 'table-primary'
-                                    : ''
-                                }
-                                onClick={() => setVentaSeleccionada(v)}
-                              >
-                                <td className="text-body-primary small">
-                                  {v.id}
-                                </td>
-                                <td className="small">
-                                  {formatFecha(v.fecha)}
-                                </td>
-                                <td className="text-end fw-semibold">
-                                  {formatMoney(v.total || 0)}
-                                </td>
-                                <td>
-                                  {v.status === 'PRESTAMO' ? (
-                                    <span className="badge bg-warning text-dark">
-                                      Préstamo
-                                    </span>
-                                  ) : (
-                                    <span className="badge bg-success-subtle text-success-emphasis border border-success-subtle">
-                                      {v.status}
-                                    </span>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-
-                            {ventasDeCuenta.length === 0 && (
-                              <tr>
-                                <td
-                                  colSpan={4}
-                                  className="text-center text-body-primary py-3"
-                                >
-                                  Esta cuenta no tiene ventas registradas.
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
+                      <div className="border rounded small bg-body mb-2">
+                        <DataTable
+                          columns={columnasVentas}
+                          data={ventasDeCuenta}
+                          initialSort={{
+                            id: 'fecha',
+                            direction: 'desc',
+                          }}
+                          maxHeight={200}
+                          onRowClick={(v) => setVentaSeleccionada(v)}
+                          getRowKey={(v) => v.id}
+                          selectedRowKey={ventaSeleccionada?.id}
+                        />
                       </div>
 
-                      {/* Productos de la venta seleccionada */}
                       {ventaSeleccionada && (
                         <div className="mt-2">
                           <div className="d-flex justify-content-between align-items-center mb-1">
@@ -308,80 +384,16 @@ export default function ReporteDeudas() {
                             </button>
                           </div>
 
-                          <div
-                            className="border rounded small bg-body"
-                            style={{ maxHeight: 200, overflowY: 'auto' }}
-                          >
-                            <table className="table table-sm table-striped mb-0 align-middle fs-6">
-                              <thead className="sticky-top">
-                                <tr>
-                                  <th>Producto</th>
-                                  <th
-                                    className="text-center"
-                                    style={{ width: 80 }}
-                                  >
-                                    Cantidad
-                                  </th>
-                                  <th
-                                    className="text-end"
-                                    style={{ width: 110 }}
-                                  >
-                                    Precio
-                                  </th>
-                                  <th
-                                    className="text-end"
-                                    style={{ width: 120 }}
-                                  >
-                                    Importe
-                                  </th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {ventaSeleccionada.ventaProductos?.map((vp) => {
-                                  const precio =
-                                    vp.precioUnitario ?? vp.precio ?? 0;
-                                  const cantidad = vp.cantidad || 0;
-                                  const importe = cantidad * precio;
-
-                                  return (
-                                    <tr key={vp.id}>
-                                      <td>
-                                        {vp.producto?.descripcion ||
-                                          `Producto ${vp.producto?.id}`}
-                                        {vp.producto?.codigo && (
-                                          <div className="text-body-primary small">
-                                            Código: {vp.producto.codigo}
-                                          </div>
-                                        )}
-                                      </td>
-                                      <td className="text-center">
-                                        {cantidad}
-                                      </td>
-                                      <td className="text-end">
-                                        {formatMoney(precio)}
-                                      </td>
-                                      <td className="text-end fw-semibold">
-                                        {formatMoney(importe)}
-                                      </td>
-                                    </tr>
-                                  );
-                                })}
-
-                                {(!ventaSeleccionada.ventaProductos ||
-                                  ventaSeleccionada.ventaProductos.length ===
-                                    0) && (
-                                  <tr>
-                                    <td
-                                      colSpan={4}
-                                      className="text-center text-body-primary py-3"
-                                    >
-                                      Esta venta no tiene productos
-                                      registrados.
-                                    </td>
-                                  </tr>
-                                )}
-                              </tbody>
-                            </table>
+                          <div className="border rounded small bg-body">
+                            <DataTable
+                              columns={columnasProductos}
+                              data={
+                                ventaSeleccionada.ventaProductos || []
+                              }
+                              maxHeight={200}
+                              striped
+                              small
+                            />
                           </div>
                         </div>
                       )}
@@ -392,7 +404,7 @@ export default function ReporteDeudas() {
             </div>
           </div>
         </div>
-      </div>  
+      </div>
     </div>
   );
 }

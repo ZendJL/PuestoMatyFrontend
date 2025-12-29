@@ -1,8 +1,8 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import Venta from './components/Venta/Venta';
-import Merma from './components/Merma';
+import Merma from './components/Merma/Merma';
 import ConsultaVentas from './components/ConsultaVentas';
-import AltasProductos from './components/AltasProductos';
+import Productos from './components/Productos/Productos';
 import Cuentas from './components/Cuentas';
 import Reportes from './components/Reportes';
 import { useTheme } from './hooks/useTheme';
@@ -44,7 +44,7 @@ function App() {
                 </NavLink>
               </li>
               <li className="nav-item">
-                <NavLink to="/altasProductos" className="nav-link">
+                <NavLink to="/productos" className="nav-link">
                   Productos
                 </NavLink>
               </li>
@@ -92,7 +92,7 @@ function App() {
           <Route path="/ventas" element={<Venta />} />
           <Route path="/merma" element={<Merma />} />
           <Route path="/consultaventas" element={<ConsultaVentas />} />
-          <Route path="/altasProductos" element={<AltasProductos />} />
+          <Route path="/productos" element={<Productos />} />
           <Route path="/cuentas" element={<Cuentas />} />
           <Route path="/reportes" element={<Reportes />} />
         </Routes>

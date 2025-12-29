@@ -2,9 +2,10 @@ import { useState, useMemo } from 'react';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { formatMoney } from '../../utils/format';
+import DataTable from '../common/DataTable';
 
 function formatoFechaInput(date) {
-  return date.toISOString().substring(0, 10); // YYYY-MM-DD
+  return date.toISOString().substring(0, 10);
 }
 
 function getInicioFinPeriodo(tipo) {
@@ -22,8 +23,8 @@ function getInicioFinPeriodo(tipo) {
     return { desde: inicioDia, hasta: finDia };
   }
   if (tipo === 'semana') {
-    const day = hoy.getDay(); // 0=domingo
-    const diff = hoy.getDate() - day + (day === 0 ? -6 : 1); // lunes
+    const day = hoy.getDay();
+    const diff = hoy.getDate() - day + (day === 0 ? -6 : 1);
     const inicioSemana = new Date(hoy.getFullYear(), hoy.getMonth(), diff);
     const finSemana = new Date(inicioSemana);
     finSemana.setDate(inicioSemana.getDate() + 6);
@@ -51,148 +52,48 @@ export default function ReporteVentasPorProducto() {
   const [desde, setDesde] = useState(formatoFechaInput(dIni));
   const [hasta, setHasta] = useState(formatoFechaInput(dFin));
   const [busqueda, setBusqueda] = useState('');
+  const [productoSeleccionado, setProductoSeleccionado] = useState(null);
 
-  // sort de tabla
-  const [sortConfig, setSortConfig] = useState({
-    key: 'totalGanancia',
-    direction: 'desc',
-  });
-
-  // Traer todos los VentaProducto
-  const { data: vpRaw, isLoading, error } = useQuery({
-    queryKey: ['ventas-productos-reporte'],
+  const { data: resumenRaw, isLoading, error } = useQuery({
+    queryKey: ['ventas-productos-reporte', { desde, hasta }],
     queryFn: async () => {
-      const res = await axios.get('/api/ventas-productos'); // debe incluir venta y producto
+      const res = await axios.get(
+        '/api/ventas-productos/reportes/ventas-por-producto',
+        {
+          params: { desde, hasta },
+        }
+      );
       return res.data;
     },
   });
 
-  const ventaProductos = Array.isArray(vpRaw) ? vpRaw : [];
-
   const datosAgrupados = useMemo(() => {
-    if (!ventaProductos.length) return [];
-
-    const dDesde = new Date(desde + 'T00:00:00');
-    const dHasta = new Date(hasta + 'T23:59:59');
-
-    const filtrados = ventaProductos.filter((vp) => {
-      if (!vp.venta?.fecha) return false;
-      const f = new Date(vp.venta.fecha);
-      return f >= dDesde && f <= dHasta;
-    });
-
-    const mapa = new Map();
-    filtrados.forEach((vp) => {
-      const prod = vp.producto || {};
-      const id = prod.id;
-      if (!id) return;
-
-      const clave = id;
-      const existente = mapa.get(clave) || {
-        productoId: id,
-        codigo: prod.codigo,
-        descripcion: prod.descripcion,
-        totalCantidad: 0,
-        totalVentas: 0,
-        totalCosto: 0,
-        totalGanancia: 0,
-        precioVentaReferencia: prod.precio ?? 0,
-        costoCompraReferencia: prod.precioCompra ?? 0,
-      };
-
-      const precioVenta = vp.precioUnitario ?? prod.precio ?? 0;
-      const costoCompra = prod.precioCompra ?? 0;
-      const cantidad = vp.cantidad || 0;
-
-      const subtotalVenta = precioVenta * cantidad;
-      const subtotalCosto = costoCompra * cantidad;
-      const subtotalGanancia = subtotalVenta - subtotalCosto;
-
-      existente.totalCantidad += cantidad;
-      existente.totalVentas += subtotalVenta;
-      existente.totalCosto += subtotalCosto;
-      existente.totalGanancia += subtotalGanancia;
-      existente.precioVentaReferencia = precioVenta;
-      existente.costoCompraReferencia = costoCompra;
-
-      mapa.set(clave, existente);
-    });
-
-    let arr = Array.from(mapa.values());
-
+    const arr = Array.isArray(resumenRaw) ? resumenRaw : [];
     const texto = busqueda.toLowerCase();
-    if (texto) {
-      arr = arr.filter(
-        (p) =>
-          p.descripcion?.toLowerCase().includes(texto) ||
-          p.codigo?.toLowerCase().includes(texto)
-      );
-    }
+    if (!texto) return arr;
 
-    return arr;
-  }, [ventaProductos, desde, hasta, busqueda]);
+    return arr.filter(
+      (p) =>
+        p.descripcion?.toLowerCase().includes(texto) ||
+        p.codigo?.toLowerCase().includes(texto)
+    );
+  }, [resumenRaw, busqueda]);
 
   const totalProductos = datosAgrupados.length;
   const totalUnidades = datosAgrupados.reduce(
-    (sum, p) => sum + p.totalCantidad,
+    (sum, p) => sum + (p.totalCantidad || 0),
     0
   );
   const totalImporte = datosAgrupados.reduce(
-    (sum, p) => sum + p.totalVentas,
+    (sum, p) => sum + Number(p.totalVentas || 0),
     0
   );
-  const totalGanancia = datosAgrupados.reduce(
-    (sum, p) => sum + p.totalGanancia,
-    0
-  );
-
-  const sortedDatos = useMemo(() => {
-    const arr = [...datosAgrupados];
-    if (!sortConfig.key) return arr;
-
-    arr.sort((a, b) => {
-      const { key, direction } = sortConfig;
-      let vA = a[key];
-      let vB = b[key];
-
-      if (typeof vA === 'string') vA = vA.toLowerCase();
-      if (typeof vB === 'string') vB = vB.toLowerCase();
-
-      let comp = 0;
-      if (vA < vB) comp = -1;
-      if (vA > vB) comp = 1;
-
-      return direction === 'asc' ? comp : -comp;
-    });
-
-    return arr;
-  }, [datosAgrupados, sortConfig]);
-
-  const handleSort = (key) => {
-    setSortConfig((prev) => {
-      if (prev.key === key) {
-        return {
-          key,
-          direction: prev.direction === 'asc' ? 'desc' : 'asc',
-        };
-      }
-      return {
-        key,
-        direction:
-          key === 'descripcion' || key === 'codigo' ? 'asc' : 'desc',
-      };
-    });
-  };
-
-  const renderSortIcon = (key) => {
-    if (sortConfig.key !== key)
-      return <span className="text-body-primary ms-1">↕</span>;
-    return (
-      <span className="ms-1">
-        {sortConfig.direction === 'asc' ? '▲' : '▼'}
-      </span>
-    );
-  };
+  const totalGanancia = datosAgrupados.reduce((sum, p) => {
+    const totalVentas = Number(p.totalVentas || 0);
+    const totalCosto = Number(p.totalCosto || 0);
+    const ganancia = totalVentas - totalCosto;
+    return sum + ganancia;
+  }, 0);
 
   const aplicarPeriodo = (nuevoTipo) => {
     setTipoPeriodo(nuevoTipo);
@@ -209,6 +110,113 @@ export default function ReporteVentasPorProducto() {
     return <div className="text-danger fs-6">Error al cargar ventas</div>;
   }
 
+  const columnas = [
+    {
+      id: 'productoId',
+      header: 'ID',
+      style: { width: 70 },
+      accessor: (p) => p.productoId,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: 'ID',
+      cellClassName: 'small text-body-primary',
+    },
+    {
+      id: 'descripcion',
+      header: 'Producto',
+      accessor: (p) => p.descripcion || '',
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: 'Descripción',
+      render: (p) => (
+        <>
+          <div
+            className="fw-semibold text-truncate"
+            style={{ maxWidth: 260 }}
+          >
+            {p.descripcion}
+          </div>
+          <div className="text-body-primary small">
+            Código: {p.codigo}
+          </div>
+        </>
+      ),
+    },
+    {
+      id: 'totalCantidad',
+      header: 'Unidades vendidas',
+      style: { width: 120 },
+      headerAlign: 'center',
+      cellClassName: 'text-center fw-semibold',
+      accessor: (p) => p.totalCantidad,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: '>= 0',
+      sortFn: (a, b) => (a || 0) - (b || 0),
+      defaultSortDirection: 'desc',
+    },
+    {
+      id: 'precioVenta',
+      header: 'Precio venta',
+      style: { width: 120 },
+      headerAlign: 'right',
+      headerClassName: 'text-end',
+      cellClassName: 'text-end',
+      accessor: (p) => {
+        if (!p.totalCantidad || p.totalCantidad === 0) return 0;
+        return Number(p.totalVentas || 0) / p.totalCantidad;
+      },
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: '>= 0',
+      render: (p) => {
+        const totalVentas = Number(p.totalVentas || 0);
+        const precioPromedio = p.totalCantidad ? totalVentas / p.totalCantidad : 0;
+        return formatMoney(precioPromedio);
+      },
+      sortFn: (a, b) => (a || 0) - (b || 0),
+    },
+    {
+      id: 'totalVentas',
+      header: 'Importe total',
+      style: { width: 140 },
+      headerAlign: 'right',
+      headerClassName: 'text-end',
+      cellClassName: 'text-end fw-semibold text-success',
+      accessor: (p) => Number(p.totalVentas || 0),
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: '>= 0',
+      render: (p) => formatMoney(Number(p.totalVentas || 0)),
+      sortFn: (a, b) => (a || 0) - (b || 0),
+      defaultSortDirection: 'desc',
+    },
+    {
+      id: 'totalGanancia',
+      header: 'Ganancia total',
+      style: { width: 140 },
+      headerAlign: 'right',
+      headerClassName: 'text-end',
+      cellClassName: 'text-end fw-semibold text-primary',
+      accessor: (p) => {
+        const totalVentas = Number(p.totalVentas || 0);
+        const totalCosto = Number(p.totalCosto || 0);
+        return totalVentas - totalCosto;
+      },
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: '>= 0',
+      render: (p) => {
+        const totalVentas = Number(p.totalVentas || 0);
+        const totalCosto = Number(p.totalCosto || 0);
+        const ganancia = totalVentas - totalCosto;
+        return formatMoney(ganancia);
+      },
+      sortFn: (a, b) => (a || 0) - (b || 0),
+      defaultSortDirection: 'desc',
+    },
+  ];
+
   return (
     <div className="d-flex justify-content-center">
       <div
@@ -223,23 +231,27 @@ export default function ReporteVentasPorProducto() {
           <div>
             <h5 className="mb-0">Ventas por producto</h5>
             <small className="text-white-50">
-              Analiza qué productos se venden más y cuál es su ganancia en el período.
+              Analiza qué productos se venden más y cuál es su ganancia en el
+              período.
             </small>
           </div>
         </div>
 
         <div className="card-body py-3 bg-body">
-          {/* Resumen */}
           <div className="row g-3 mb-3">
             <div className="col-md-3">
               <div className="border rounded p-2 bg-body">
-                <div className="small text-body-primary">Productos vendidos</div>
+                <div className="small text-body-primary">
+                  Productos vendidos
+                </div>
                 <div className="fs-5 fw-bold">{totalProductos}</div>
               </div>
             </div>
             <div className="col-md-3">
               <div className="border rounded p-2 bg-body">
-                <div className="small text-body-primary">Unidades totales</div>
+                <div className="small text-body-primary">
+                  Unidades totales
+                </div>
                 <div className="fs-5 fw-bold">{totalUnidades}</div>
               </div>
             </div>
@@ -261,7 +273,6 @@ export default function ReporteVentasPorProducto() {
             </div>
           </div>
 
-          {/* Filtros */}
           <div className="border rounded p-2 mb-3 bg-body">
             <div className="row g-2 align-items-end">
               <div className="col-md-4">
@@ -342,135 +353,24 @@ export default function ReporteVentasPorProducto() {
             </div>
           </div>
 
-          {/* Tabla */}
           <div className="card">
             <div className="card-header py-2 d-flex justify-content-between align-items-center bg-body-tertiary">
               <h6 className="mb-0">Detalle por producto</h6>
               <small className="text-body-primary">
-                Clic en los encabezados para ordenar
+                Clic en los encabezados para ordenar. Filtros en la fila
+                inferior.
               </small>
             </div>
             <div className="card-body p-0 bg-body">
-              <div
-                className="table-responsive"
-                style={{ maxHeight: 360, overflowY: 'auto' }}
-              >
-                <table className="table table-sm table-hover table-striped mb-0 align-middle fs-6">
-                  <thead className="sticky-top">
-                    <tr>
-                      <th
-                        style={{ width: 70, cursor: 'pointer' }}
-                        onClick={() => handleSort('productoId')}
-                      >
-                        ID
-                        {renderSortIcon('productoId')}
-                      </th>
-                      <th
-                        style={{ minWidth: 220, cursor: 'pointer' }}
-                        onClick={() => handleSort('descripcion')}
-                      >
-                        Producto
-                        {renderSortIcon('descripcion')}
-                      </th>
-                      <th
-                        className="text-center"
-                        style={{ width: 110, cursor: 'pointer' }}
-                        onClick={() => handleSort('totalCantidad')}
-                      >
-                        Unidades Vendidas
-                        {renderSortIcon('totalCantidad')}
-                      </th>
-                      <th
-                        className="text-end"
-                        style={{ width: 140, cursor: 'pointer' }}
-                        onClick={() => handleSort('costoCompraReferencia')}
-                      >
-                        Costo
-                        {renderSortIcon('costoCompraReferencia')}
-                      </th>
-                      <th
-                        className="text-end"
-                        style={{ width: 140, cursor: 'pointer' }}
-                        onClick={() => handleSort('precioVentaReferencia')}
-                      >
-                        Precio
-                        {renderSortIcon('precioVentaReferencia')}
-                      </th>
-                      <th
-                        className="text-end"
-                        style={{ width: 140, cursor: 'pointer' }}
-                        onClick={() => handleSort('totalVentas')}
-                      >
-                        Importe total
-                        {renderSortIcon('totalVentas')}
-                      </th>
-                      <th
-                        className="text-end"
-                        style={{ width: 140, cursor: 'pointer' }}
-                        onClick={() => handleSort('totalGanancia')}
-                      >
-                        Ganancia total
-                        {renderSortIcon('totalGanancia')}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sortedDatos.map((p) => {
-                      const precioVenta = p.totalCantidad
-                        ? p.totalVentas / p.totalCantidad // precio promedio
-                        : p.precioVentaReferencia;
-                      const costoCompra = p.totalCantidad
-                        ? p.totalCosto / p.totalCantidad // costo promedio
-                        : p.costoCompraReferencia;
-
-                      return (
-                        <tr key={p.productoId}>
-                          <td className="small text-body-primary">
-                            {p.productoId}
-                          </td>
-                          <td className="small">
-                            <div
-                              className="fw-semibold text-truncate"
-                              style={{ maxWidth: 260 }}
-                            >
-                              {p.descripcion}
-                            </div>
-                            <div className="text-body-primary small">
-                              Código: {p.codigo}
-                            </div>
-                          </td>
-                          <td className="text-center fw-semibold">
-                            {p.totalCantidad}
-                          </td>
-                          <td className="text-end text-body-primary">
-                            {formatMoney(costoCompra)}
-                          </td>
-                          <td className="text-end">
-                            {formatMoney(precioVenta)}
-                          </td>
-                          <td className="text-end fw-semibold text-success">
-                            {formatMoney(p.totalVentas)}
-                          </td>
-                          <td className="text-end fw-semibold text-primary">
-                            {formatMoney(p.totalGanancia)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-
-                    {sortedDatos.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={7}
-                          className="text-center text-body-primary py-3"
-                        >
-                          No hay ventas en el período seleccionado.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                columns={columnas}
+                data={datosAgrupados}
+                initialSort={{ id: 'totalGanancia', direction: 'desc' }}
+                maxHeight={360}
+                getRowKey={(p) => p.productoId}
+                onRowClick={(p) => setProductoSeleccionado(p)}
+                selectedRowKey={productoSeleccionado?.productoId}
+              />
             </div>
           </div>
         </div>

@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import axios from 'axios';
 import { useQuery } from '@tanstack/react-query';
 import { formatFecha } from '../../utils/format';
+import DataTable from '../common/DataTable';
 
 function formatoFechaInput(date) {
   return date.toISOString().substring(0, 10);
@@ -45,7 +46,7 @@ function getInicioFinPeriodo(tipo) {
   return { desde: inicioDia, hasta: hoy };
 }
 
-const TIPOS_MERMA = ['CADUCIDAD', 'MAL_ESTADO', 'USO_PERSONAL', 'ROBO'];
+const TIPOS_MERMA = ['CADUCADO', 'MAL_ESTADO', 'USO_PERSONAL', 'ROBO', 'OTRO'];
 
 export default function ReporteMermas() {
   const [tipoPeriodo, setTipoPeriodo] = useState('dia');
@@ -71,8 +72,8 @@ export default function ReporteMermas() {
     const dHasta = new Date(hasta + 'T23:59:59');
 
     let lista = mermas.filter((m) => {
-      if (!m.fechaSalida) return false;
-      const f = new Date(m.fechaSalida);
+      if (!m.fecha) return false;
+      const f = new Date(m.fecha);
       return f >= dDesde && f <= dHasta;
     });
 
@@ -87,7 +88,6 @@ export default function ReporteMermas() {
       );
     }
 
-    lista.sort((a, b) => new Date(b.fechaSalida) - new Date(a.fechaSalida));
     return lista;
   }, [mermas, desde, hasta, tiposSeleccionados, busqueda]);
 
@@ -121,16 +121,77 @@ export default function ReporteMermas() {
     tiposSeleccionados.length === TIPOS_MERMA.length;
 
   const labelTipo = (t) =>
-    t === 'CADUCIDAD'
-      ? 'Caducidad'
+    t === 'CADUCADO'
+      ? 'Caducado'
       : t === 'MAL_ESTADO'
       ? 'Mal estado'
       : t === 'USO_PERSONAL'
       ? 'Uso personal'
-      : 'Robo';
+      : t === 'ROBO'
+      ? 'Robo'
+      : 'Otro';
 
   if (isLoading) return <div className="fs-6">Cargando mermas...</div>;
-  if (error) return <div className="text-danger fs-6">Error al cargar mermas</div>;
+  if (error)
+    return <div className="text-danger fs-6">Error al cargar mermas</div>;
+
+  const columnasMermas = [
+    {
+      id: 'fecha',
+      header: 'Fecha',
+      style: { width: 170 },
+      accessor: (m) => m.fecha,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: 'AAAA-MM-DD',
+      render: (m) => {
+        const d = new Date(m.fecha);
+        if (Number.isNaN(d.getTime())) return m.fecha;
+        const fechaStr = d.toLocaleDateString('es-MX', {
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        });
+        const horaStr = d.toLocaleTimeString('es-MX', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        });
+        return (
+          <>
+            <div>{fechaStr}</div>
+            <div className="text-body-secondary small">{horaStr}</div>
+          </>
+        );
+      },
+      sortFn: (a, b) => new Date(a) - new Date(b),
+      defaultSortDirection: 'desc',
+    },
+    {
+      id: 'tipoMerma',
+      header: 'Tipo',
+      style: { width: 140 },
+      accessor: (m) => m.tipoMerma,
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: 'Tipo',
+      render: (m) => labelTipo(m.tipoMerma),
+    },
+    {
+      id: 'descripcion',
+      header: 'Descripción',
+      accessor: (m) => m.descripcion || '',
+      filterable: true,
+      filterPlaceholder: 'Descripción',
+      cellClassName: 'text-truncate small text-body-primary',
+    },
+  ];
+
+  const totalCostoMermaSeleccionada =
+    mermaSeleccionada?.mermaProductos?.reduce(
+      (acc, mp) => acc + (mp.costoTotal || 0),
+      0
+    ) || 0;
 
   return (
     <div className="d-flex justify-content-center">
@@ -158,7 +219,6 @@ export default function ReporteMermas() {
         </div>
 
         <div className="card-body py-3 bg-body">
-          {/* Filtros */}
           <div className="border rounded p-2 mb-3 bg-body">
             <div className="row g-2 align-items-end">
               <div className="col-md-4">
@@ -272,67 +332,25 @@ export default function ReporteMermas() {
           </div>
 
           <div className="row g-3">
-            {/* Tabla de mermas */}
             <div className="col-md-7">
               <div className="card h-100">
                 <div className="card-header py-2 bg-body-tertiary">
                   <h6 className="mb-0">Mermas registradas</h6>
                 </div>
                 <div className="card-body p-0 bg-body">
-                  <div
-                    className="table-responsive"
-                    style={{ maxHeight: 320, overflowY: 'auto' }}
-                  >
-                    <table className="table table-hover table-striped mb-0 align-middle fs-6">
-                      <thead className="sticky-top">
-                        <tr>
-                          <th style={{ width: 170 }}>Fecha</th>
-                          <th style={{ width: 140 }}>Tipo</th>
-                          <th>Descripción</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mermasFiltradas.map((m) => (
-                          <tr
-                            key={m.id}
-                            onClick={() => setMermaSeleccionada(m)}
-                            style={{ cursor: 'pointer' }}
-                            className={
-                              mermaSeleccionada?.id === m.id
-                                ? 'table-primary'
-                                : ''
-                            }
-                          >
-                            <td className="small text-body-primary">
-                              {formatFecha(m.fechaSalida)}
-                            </td>
-                            <td className="small text-body-primary">
-                              {labelTipo(m.tipoMerma)}
-                            </td>
-                            <td className="text-truncate small text-body-primary">
-                              {m.descripcion}
-                            </td>
-                          </tr>
-                        ))}
-
-                        {mermasFiltradas.length === 0 && (
-                          <tr>
-                            <td
-                              colSpan={3}
-                              className="text-center text-body-primary py-3"
-                            >
-                              No hay mermas en el período seleccionado.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                  <DataTable
+                    columns={columnasMermas}
+                    data={mermasFiltradas}
+                    initialSort={{ id: 'fecha', direction: 'desc' }}
+                    maxHeight={320}
+                    onRowClick={(m) => setMermaSeleccionada(m)}
+                    getRowKey={(m) => m.id}
+                    selectedRowKey={mermaSeleccionada?.id}
+                  />
                 </div>
               </div>
             </div>
 
-            {/* Detalle de merma */}
             <div className="col-md-5">
               <div className="card h-100">
                 <div className="card-header py-2 d-flex justify-content-between align-items-center bg-body-tertiary">
@@ -359,7 +377,7 @@ export default function ReporteMermas() {
                       <div className="mb-2 small text-body-primary">
                         <div>
                           <strong>Fecha:</strong>{' '}
-                          {formatFecha(mermaSeleccionada.fechaSalida)}
+                          {formatFecha(mermaSeleccionada.fecha)}
                         </div>
                         <div>
                           <strong>Tipo:</strong>{' '}
@@ -368,6 +386,10 @@ export default function ReporteMermas() {
                         <div>
                           <strong>Descripción:</strong>{' '}
                           {mermaSeleccionada.descripcion}
+                        </div>
+                        <div>
+                          <strong>Costo total merma:</strong>{' '}
+                          ${totalCostoMermaSeleccionada.toFixed(2)}
                         </div>
                       </div>
 
@@ -385,6 +407,18 @@ export default function ReporteMermas() {
                               >
                                 Cantidad
                               </th>
+                              <th
+                                className="text-end"
+                                style={{ width: 90 }}
+                              >
+                                Costo unit.
+                              </th>
+                              <th
+                                className="text-end"
+                                style={{ width: 90 }}
+                              >
+                                Costo total
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
@@ -400,6 +434,18 @@ export default function ReporteMermas() {
                                 <td className="text-center">
                                   {mp.cantidad}
                                 </td>
+                                <td className="text-end">
+                                  {mp.costoTotal != null && mp.cantidad
+                                    ? `$${(mp.costoTotal / mp.cantidad).toFixed(
+                                        2
+                                      )}`
+                                    : '-'}
+                                </td>
+                                <td className="text-end">
+                                  {mp.costoTotal != null
+                                    ? `$${mp.costoTotal.toFixed(2)}`
+                                    : '-'}
+                                </td>
                               </tr>
                             ))}
 
@@ -408,7 +454,7 @@ export default function ReporteMermas() {
                                 0) && (
                               <tr>
                                 <td
-                                  colSpan={2}
+                                  colSpan={4}
                                   className="text-center text-body-primary py-3"
                                 >
                                   Esta merma no tiene productos asociados.
@@ -425,7 +471,7 @@ export default function ReporteMermas() {
             </div>
           </div>
         </div>
-      </div>  
+      </div>
     </div>
   );
 }

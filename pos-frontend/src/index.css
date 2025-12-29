@@ -17,3 +17,13 @@
   --bs-body-bg: #121212;
   --bs-body-color: #f8f9fa;
 }
+.hover-shadow {
+  transition: all 0.2s ease-in-out;
+}
+.hover-shadow:hover {
+  box-shadow: 0 0.25rem 0.75rem rgba(0,0,0,0.1) !important;
+  transform: translateY(-2px);
+}
+.hover-scale:hover {
+  transform: scale(1.02);
+}

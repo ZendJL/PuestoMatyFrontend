@@ -26,6 +26,8 @@ export default function AltasProductos() {
   const [busquedaProducto, setBusquedaProducto] = useState('');
   const [productoSeleccionado, setProductoSeleccionado] = useState(null);
   const [cantidadAgregar, setCantidadAgregar] = useState('');
+  const [precioCompraAgregar, setPrecioCompraAgregar] = useState(''); // NUEVO
+
   const [descripcionEdit, setDescripcionEdit] = useState('');
   const [precioEdit, setPrecioEdit] = useState('');
   const [precioCompraEdit, setPrecioCompraEdit] = useState('');
@@ -101,9 +103,29 @@ export default function AltasProductos() {
       alert('Selecciona un producto primero');
       return;
     }
+
     const cant = Number(cantidadAgregar);
     if (Number.isNaN(cant) || cant <= 0) {
       alert('La cantidad a agregar debe ser mayor a 0');
+      return;
+    }
+
+    const costoStr = precioCompraAgregar.trim();
+
+    // Si nunca ha tenido costo, aquí es obligatorio
+    if (
+      productoSeleccionado.precioCompra == null &&
+      (costoStr === '' || Number.isNaN(Number(costoStr)))
+    ) {
+      alert('Debes capturar el costo de compra para este producto.');
+      return;
+    }
+
+    const precioCompra = Number(
+      costoStr === '' ? productoSeleccionado.precioCompra : costoStr
+    );
+    if (Number.isNaN(precioCompra) || precioCompra < 0) {
+      alert('El costo de compra debe ser un número mayor o igual a 0');
       return;
     }
 
@@ -111,18 +133,23 @@ export default function AltasProductos() {
       const res = await axios.post(
         `/api/productos/${productoSeleccionado.id}/agregar-stock`,
         null,
-        { params: { cantidad: cant } }
+        { params: { cantidad: cant, precioCompra } }
       );
       alert(
         `✅ Se agregaron ${cant} unidades. Nuevo inventario: ${res.data.cantidad}`
       );
       setProductoSeleccionado(res.data);
       setCantidadAgregar('');
+      setPrecioCompraAgregar(String(precioCompra)); // mantener valor para siguientes lotes
       queryClient.invalidateQueries({ queryKey: ['productos-altas'] });
       queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
     } catch (err) {
       console.error(err);
-      alert('❌ Error al agregar inventario');
+      const msg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        'Error al agregar inventario';
+      alert(`❌ ${msg}`);
     }
   };
 
@@ -181,6 +208,7 @@ export default function AltasProductos() {
       setCodigoEdit('');
       setActivoEdit(true);
       setCantidadAgregar('');
+      setPrecioCompraAgregar('');
       setBusquedaProducto('');
     } catch (err) {
       console.error(err);
@@ -196,7 +224,7 @@ export default function AltasProductos() {
       <div
         className="card shadow-sm w-100"
         style={{
-          maxWidth: 'calc(100vw - 100px)', // 50px de margen lateral
+          maxWidth: 'calc(100vw - 100px)',
           marginTop: '1.5rem',
           marginBottom: '2rem',
         }}
@@ -225,6 +253,8 @@ export default function AltasProductos() {
             <div className="col-md-6 border-end">
               <h6 className="mb-2">Alta de producto nuevo</h6>
               <form onSubmit={handleSubmit} className="row g-3">
+                {/* ... SECCIÓN DE ALTA IGUAL QUE ANTES ... */}
+                {/* (la de la izquierda no cambia) */}
                 <div className="col-md-5">
                   <label className="form-label mb-1">Código de barras</label>
                   <input
@@ -238,7 +268,6 @@ export default function AltasProductos() {
                     required
                   />
                 </div>
-
                 <div className="col-md-7">
                   <label className="form-label mb-1">Descripción</label>
                   <input
@@ -251,7 +280,6 @@ export default function AltasProductos() {
                     required
                   />
                 </div>
-
                 <div className="col-md-4">
                   <label className="form-label mb-1">Precio venta</label>
                   <div className="input-group input-group-sm">
@@ -268,7 +296,6 @@ export default function AltasProductos() {
                     />
                   </div>
                 </div>
-
                 <div className="col-md-4">
                   <label className="form-label mb-1">Costo de compra</label>
                   <div className="input-group input-group-sm">
@@ -287,7 +314,6 @@ export default function AltasProductos() {
                     Opcional. Útil para margen de ganancia.
                   </small>
                 </div>
-
                 <div className="col-md-4">
                   <label className="form-label mb-1">Inventario inicial</label>
                   <input
@@ -300,7 +326,6 @@ export default function AltasProductos() {
                     required
                   />
                 </div>
-
                 <div className="col-md-6">
                   <label className="form-label mb-1">Proveedor</label>
                   <input
@@ -312,7 +337,6 @@ export default function AltasProductos() {
                     placeholder="Opcional"
                   />
                 </div>
-
                 <div className="col-12 d-flex justify-content-end gap-2 mt-2">
                   <button
                     type="button"
@@ -384,6 +408,12 @@ export default function AltasProductos() {
                               p.activo == null ? true : p.activo
                             );
                             setCodigoEdit(p.codigo || '');
+                            setCantidadAgregar('');
+                            setPrecioCompraAgregar(
+                              p.precioCompra != null
+                                ? String(p.precioCompra)
+                                : ''
+                            );
                           }}
                         >
                           <td
@@ -411,7 +441,7 @@ export default function AltasProductos() {
                               Stock: {p.cantidad}
                             </div>
                             <div className="text-body-primary small">
-                                                            Estado:{' '}
+                              Estado:{' '}
                               {p.activo === false ? 'Inactivo' : 'Activo'}
                             </div>
                           </td>
@@ -449,7 +479,40 @@ export default function AltasProductos() {
                         className="form-control form-control-sm"
                         value={cantidadAgregar}
                         onChange={(e) => setCantidadAgregar(e.target.value)}
+                        placeholder="Cantidad a agregar"
                       />
+                    </div>
+
+                    <div className="mb-2">
+                      <label className="form-label mb-1">
+                        Costo de compra para este lote
+                      </label>
+                      <div className="input-group input-group-sm">
+                        <span className="input-group-text">$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          className="form-control"
+                          value={precioCompraAgregar}
+                          onChange={(e) =>
+                            setPrecioCompraAgregar(e.target.value)
+                          }
+                          placeholder={
+                            productoSeleccionado.precioCompra != null
+                              ? `Último costo: ${productoSeleccionado.precioCompra}`
+                              : 'Obligatorio la primera vez'
+                          }
+                        />
+                      </div>
+                      <small className="form-text text-body-secondary">
+                        {productoSeleccionado.precioCompra != null
+                          ? 'Si no cambias el valor, se usará el mismo costo de compra anterior.'
+                          : 'Este producto no tiene costo registrado; debes capturarlo al menos una vez.'}
+                      </small>
+                    </div>
+
+                    <div className="d-flex justify-content-end">
                       <button
                         type="button"
                         className="btn btn-outline-primary btn-sm"
@@ -458,7 +521,8 @@ export default function AltasProductos() {
                         Agregar
                       </button>
                     </div>
-                    <div className="form-text">
+
+                    <div className="form-text mt-1">
                       Ejemplo: si tenías 10 y agregas 20, el inventario quedará
                       en 30.
                     </div>
@@ -466,6 +530,7 @@ export default function AltasProductos() {
 
                   {/* Edición de datos */}
                   <div className="border rounded p-2 bg-body">
+                    {/* ... resto de edición igual que ya lo tenías ... */}
                     <div className="mb-2">
                       <label className="form-label mb-1">
                         Modificar descripción
@@ -477,7 +542,6 @@ export default function AltasProductos() {
                         onChange={(e) => setDescripcionEdit(e.target.value)}
                       />
                     </div>
-
                     <div className="mb-2">
                       <label className="form-label mb-1">
                         Modificar precio venta
@@ -494,7 +558,6 @@ export default function AltasProductos() {
                         />
                       </div>
                     </div>
-
                     <div className="mb-2">
                       <label className="form-label mb-1">
                         Modificar costo de compra
@@ -513,7 +576,6 @@ export default function AltasProductos() {
                         />
                       </div>
                     </div>
-
                     <div className="mb-2">
                       <label className="form-label mb-1">
                         Modificar código
@@ -525,7 +587,6 @@ export default function AltasProductos() {
                         onChange={(e) => setCodigoEdit(e.target.value)}
                       />
                     </div>
-
                     <div className="mb-3 form-check">
                       <input
                         className="form-check-input"
@@ -541,7 +602,6 @@ export default function AltasProductos() {
                         Producto activo (visible y vendible)
                       </label>
                     </div>
-
                     <div className="d-flex justify-content-end">
                       <button
                         type="button"

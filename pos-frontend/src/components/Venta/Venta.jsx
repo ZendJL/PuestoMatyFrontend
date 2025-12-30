@@ -1,8 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatMoney } from '../../utils/format';
-import { imprimirTicketVenta } from './TicketPrinter';  // ✅ Nuevo endpoint: solo ID
+import { imprimirTicketVenta } from './TicketPrinter';
 import ProductoSearch from './ProductoSearch';
 import VentaTabla from './VentaTabla';
 import ModoPago from './ModoPago';
@@ -14,48 +14,159 @@ const DENOMINACIONES = [20, 30, 40, 50, 100, 150, 200, 250, 500, 1000];
 
 export default function Venta() {
   const [venta, setVenta] = useState([]);
+  const [busquedaInput, setBusquedaInput] = useState('');
   const [busqueda, setBusqueda] = useState('');
+  const [codigoEscaneado, setCodigoEscaneado] = useState('');
   const [modoPrestamo, setModoPrestamo] = useState(false);
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null);
   const [busquedaCuenta, setBusquedaCuenta] = useState('');
   const [pagoCliente, setPagoCliente] = useState('');
   const [pageSize, setPageSize] = useState(10);
-
+  
+  const inputBusquedaRef = useRef(null); // ⭐ REF para autofocus
   const queryClient = useQueryClient();
 
-  // ✅ QUERY 1: Productos activos (1 sola vez)
+  // ✅ QUERIES
   const { data: productosRaw, isLoading, error } = useQuery({
     queryKey: ['productos-pos'],
     queryFn: async () => axios.get('/api/productos/activos').then(res => res.data),
     staleTime: 5 * 60 * 1000,
   });
 
-  // ✅ QUERY 2: TODAS las cuentas (1 sola vez)
-const { data: cuentasRaw } = useQuery({
-  queryKey: ['cuentas-optimizadas-pos'],
-  queryFn: async () => {
-    const res = await axios.get('/api/cuentas/optimizadas-pos');
-    return res.data;
-  },
-  staleTime: 10 * 60 * 1000,
-  enabled: modoPrestamo,  // ✅ Lazy loading
-});
+  const { data: cuentasRaw } = useQuery({
+    queryKey: ['cuentas-optimizadas-pos'],
+    queryFn: async () => axios.get('/api/cuentas/optimizadas-pos').then(res => res.data),
+    staleTime: 10 * 60 * 1000,
+    enabled: modoPrestamo,
+  });
 
   const productos = Array.isArray(productosRaw) ? productosRaw : productosRaw?.content || [];
   const cuentas = Array.isArray(cuentasRaw) ? cuentasRaw : [];
 
-  // ✅ CACHÉ LOCAL - 0 queries adicionales
+  // ⭐ AUTOFOCUS al montar componente
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      inputBusquedaRef.current?.focus();
+      console.log('🎯 AUTOFOCUS aplicado en Venta');
+    }, 150);
+    
+    return () => clearTimeout(timer);
+  }, []);
+
+  // ⭐ LISTENER GLOBAL DE ESCANEO
+  useEffect(() => {
+    const bufferEscaner = { current: '' };
+    let timerEscaner = null;
+    let escaneando = false;
+
+    const handleEscaneo = (e) => {
+      // ⭐ SOLO ignorar inputs NUMÉRICOS y TEXTAREAS
+      const elementoActivo = document.activeElement;
+      const esInputNumerico = elementoActivo?.type === 'number';
+      const esTextarea = elementoActivo?.tagName === 'TEXTAREA';
+      
+      if (esInputNumerico || esTextarea) {
+        if (escaneando) {
+          bufferEscaner.current = '';
+          escaneando = false;
+          setCodigoEscaneado('');
+          clearTimeout(timerEscaner);
+        }
+        return;
+      }
+
+      // ENTER - Procesar código completo
+      if (e.key === 'Enter') {
+        if (bufferEscaner.current.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          const codigo = bufferEscaner.current.trim();
+          console.log('🔍 CÓDIGO ESCANEADO:', codigo, '(longitud:', codigo.length, ')');
+          
+          const producto = productos.find(
+            p => p.codigo?.toString().trim() === codigo
+          );
+          
+          if (producto) {
+            console.log('✅ PRODUCTO ENCONTRADO:', producto.descripcion);
+            agregarAlCarrito(producto);
+          } else {
+            console.log('❌ CÓDIGO NO ENCONTRADO:', codigo);
+            alert(`Código "${codigo}" no encontrado en el inventario`);
+          }
+          
+          bufferEscaner.current = '';
+          escaneando = false;
+          setCodigoEscaneado('');
+        }
+        return;
+      }
+
+      // SOLO NÚMEROS
+      if (!/^[0-9]$/.test(e.key)) {
+        return;
+      }
+
+      // ⭐ CAPTURAR NÚMEROS (incluso en input de búsqueda)
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (!escaneando) {
+        console.log('🔢 INICIO ESCANEO');
+        escaneando = true;
+        bufferEscaner.current = '';
+        setCodigoEscaneado('');
+      }
+
+      bufferEscaner.current += e.key;
+      console.log('🔢 BUFFER:', bufferEscaner.current);
+      setCodigoEscaneado(bufferEscaner.current);
+
+      clearTimeout(timerEscaner);
+      timerEscaner = setTimeout(() => {
+        console.log('⏱️ TIMEOUT - Limpiando buffer');
+        bufferEscaner.current = '';
+        escaneando = false;
+        setCodigoEscaneado('');
+      }, 300);
+    };
+
+    window.addEventListener('keydown', handleEscaneo, true);
+    console.log('✅ ESCÁNER GLOBAL ACTIVADO');
+
+    return () => {
+      window.removeEventListener('keydown', handleEscaneo, true);
+      clearTimeout(timerEscaner);
+      console.log('❌ ESCÁNER GLOBAL DESACTIVADO');
+    };
+  }, [productos]);
+
+  // ✅ FILTRADO PARA BÚSQUEDA MANUAL
+  useEffect(() => {
+    if (codigoEscaneado.length === 0) {
+      setBusqueda(busquedaInput);
+    }
+  }, [busquedaInput, codigoEscaneado]);
+
   const cuentaSeleccionadaData = useMemo(() => {
     if (!cuentaSeleccionada?.id || !cuentas.length) return null;
     return cuentas.find(c => c.id === cuentaSeleccionada.id) || null;
   }, [cuentaSeleccionada?.id, cuentas]);
 
-  const productosFiltrados = productos
-    .filter(p => {
-      const q = busqueda.toLowerCase();
-      return p.codigo?.toLowerCase().includes(q) || p.descripcion?.toLowerCase().includes(q);
-    })
-    .slice(0, 10);
+  const productosFiltrados = useMemo(() => {
+    if (!busqueda.trim() || codigoEscaneado.length > 0) return [];
+    
+    return productos
+      .filter(p => {
+        const q = busqueda.toLowerCase().trim();
+        return (
+          p.descripcion?.toLowerCase().includes(q) ||
+          p.codigo?.toString().includes(q)
+        );
+      })
+      .slice(0, 5);
+  }, [busqueda, productos, codigoEscaneado]);
 
   const total = useMemo(() => venta.reduce((sum, item) => sum + item.precio * item.cantidad, 0), [venta]);
   const cambio = useMemo(() => {
@@ -63,10 +174,12 @@ const { data: cuentasRaw } = useQuery({
     return Number.isNaN(pago) ? 0 : Math.max(pago - total, 0);
   }, [pagoCliente, total]);
 
-  const agregarAlCarrito = (producto) => {
+  const agregarAlCarrito = useCallback((producto) => {
+    console.log('➕ AGREGANDO:', producto.codigo, '-', producto.descripcion);
+    
     const stock = producto.cantidad ?? 0;
     if (stock <= 0) {
-      alert('Sin inventario disponible');
+      alert('❌ Sin inventario disponible');
       return;
     }
 
@@ -74,7 +187,7 @@ const { data: cuentasRaw } = useQuery({
     const nuevaCantidad = enCarrito + 1;
 
     if (nuevaCantidad > stock) {
-      alert(`No puedes vender más de ${stock} unidades de ${producto.descripcion}`);
+      alert(`❌ Máximo ${stock} unidades de "${producto.descripcion}"`);
       return;
     }
 
@@ -98,19 +211,21 @@ const { data: cuentasRaw } = useQuery({
       ];
     });
 
+    // ✅ LIMPIAR Y RE-ENFOCAR
+    setBusquedaInput('');
     setBusqueda('');
-  };
+    setCodigoEscaneado('');
+    
+    setTimeout(() => {
+      inputBusquedaRef.current?.focus();
+    }, 50);
+  }, [venta]);
 
-  const manejarSeleccionProducto = (producto) => agregarAlCarrito(producto);
-  const manejarSeleccionPorEnter = () => {
-    if (!busqueda) return;
-    const exacto = productos.find(p => p.codigo?.toLowerCase() === busqueda.toLowerCase());
-    if (exacto) return manejarSeleccionProducto(exacto);
-    if (productosFiltrados.length > 0) manejarSeleccionProducto(productosFiltrados[0]);
-  };
+  const quitarDelCarrito = useCallback((id) => {
+    setVenta(prev => prev.filter(item => item.id !== id));
+  }, []);
 
-  const quitarDelCarrito = (id) => setVenta(prev => prev.filter(item => item.id !== id));
-  const cambiarCantidad = (id, nuevaCantidadRaw) => {
+  const cambiarCantidad = useCallback((id, nuevaCantidadRaw) => {
     let nuevaCantidad = Number(nuevaCantidadRaw);
     if (Number.isNaN(nuevaCantidad) || nuevaCantidad < 1) nuevaCantidad = 1;
 
@@ -119,23 +234,32 @@ const { data: cuentasRaw } = useQuery({
         if (item.id !== id) return item;
         const stock = item.stock ?? 0;
         if (nuevaCantidad > stock) {
-          alert(`No puedes vender más de ${stock} unidades de ${item.descripcion}`);
+          alert(`No puedes vender más de ${stock} unidades`);
           return { ...item, cantidad: stock };
         }
         return { ...item, cantidad: nuevaCantidad };
       })
     );
-  };
+  }, []);
 
-  const aplicarDenominacion = (monto) => setPagoCliente(String(monto.toFixed(2)));
-  const limpiarVenta = () => {
+  const aplicarDenominacion = useCallback((monto) => {
+    setPagoCliente(String(monto.toFixed(2)));
+  }, []);
+
+  const limpiarVenta = useCallback(() => {
     setVenta([]);
     setModoPrestamo(false);
     setCuentaSeleccionada(null);
     setBusquedaCuenta('');
+    setBusquedaInput('');
     setBusqueda('');
+    setCodigoEscaneado('');
     setPagoCliente('');
-  };
+    
+    setTimeout(() => {
+      inputBusquedaRef.current?.focus();
+    }, 50);
+  }, []);
 
   const finalizarVenta = async () => {
     if (venta.length === 0) return alert('Carrito vacío');
@@ -172,9 +296,8 @@ const { data: cuentasRaw } = useQuery({
         ` por ${formatMoney(total)}${mensajeCambio}`
       );
 
-      // ✅ CAMBIO CRÍTICO: Solo pasar ID - 1 query optimizada
       if (window.confirm('¿Imprimir ticket?')) {
-        imprimirTicketVenta(ventaGuardada.id);  // ✅ Backend trae TODO
+        imprimirTicketVenta(ventaGuardada.id);
       }
 
       limpiarVenta();
@@ -198,7 +321,10 @@ const { data: cuentasRaw } = useQuery({
           <div className="row align-items-center">
             <div className="col-md-8">
               <h5 className="mb-1">🛒 Punto de Venta</h5>
-              <small className="opacity-75">{venta.length} productos</small>
+              <small className="opacity-75">
+                {venta.length} productos
+                {codigoEscaneado.length > 0 && ' | 🔢 ESCÁNER ACTIVO'}
+              </small>
             </div>
             <div className="col-md-4 text-end">
               <div className="fs-2 fw-bold text-warning">{formatMoney(total)}</div>
@@ -211,12 +337,14 @@ const { data: cuentasRaw } = useQuery({
           <div className="row g-3">
             <div className="col-lg-8">
               <ProductoSearch
+                busquedaInput={busquedaInput}
+                setBusquedaInput={setBusquedaInput}
                 busqueda={busqueda}
-                setBusqueda={setBusqueda}
                 productosFiltrados={productosFiltrados}
-                manejarSeleccionProducto={manejarSeleccionProducto}
-                manejarSeleccionPorEnter={manejarSeleccionPorEnter}
+                manejarSeleccionProducto={agregarAlCarrito}
                 formatMoney={formatMoney}
+                codigoEscaneado={codigoEscaneado}
+                inputRef={inputBusquedaRef} // ⭐ PASAR REF
               />
               <VentaTabla
                 carrito={venta}

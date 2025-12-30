@@ -47,7 +47,7 @@ export default function CobroContado({
           </div>
         </div>
 
-        <div className="d-flex justify-content-between align-items-center p-2 bg-light rounded">
+        <div className="d-flex justify-content-between align-items-center p-2  rounded">
           <span className="fw-bold text-primary">Cambio:</span>
           <span className="fs-4 fw-bold text-success">
             {formatMoney(cambio)}

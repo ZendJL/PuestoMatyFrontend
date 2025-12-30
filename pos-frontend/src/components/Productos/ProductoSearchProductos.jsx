@@ -60,8 +60,8 @@ export default function ProductoSearchProductos({
                     }}
                   >
                     <td className="text-truncate pe-3" style={{ maxWidth: '220px' }}>
-                      <div className="fw-bold text-body">{p.descripcion}</div>
-                      <small className="text-body-secondary">#{p.codigo}</small>
+                      <div className="fw-bold ">{p.descripcion}</div>
+                      <small className="">#{p.codigo}</small>
                     </td>
                     <td className="text-end">
                       <div className="fw-bold text-success">{formatMoney(p.precio ?? 0)}</div>
@@ -70,7 +70,7 @@ export default function ProductoSearchProductos({
                         <span className={`ms-1 badge fs-6 px-2 py-1 fw-semibold ${
                           p.activo === false ? 'bg-danger text-white' : 'bg-success text-white'
                         }`}>
-                          {p.activo === false ? 'OFF' : 'ON'}
+                          {p.activo === false ? 'Inactivo' : 'Activo'}
                         </span>
                       </div>
                     </td>

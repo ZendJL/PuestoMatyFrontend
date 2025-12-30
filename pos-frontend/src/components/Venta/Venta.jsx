@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import axios from 'axios';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatMoney } from '../../utils/format';
-import { imprimirTicketVenta } from './TicketPrinter';
+import { imprimirTicketVenta } from './TicketPrinter';  // ✅ Nuevo endpoint: solo ID
 import ProductoSearch from './ProductoSearch';
 import VentaTabla from './VentaTabla';
 import ModoPago from './ModoPago';
@@ -20,36 +20,35 @@ export default function Venta() {
   const [busquedaCuenta, setBusquedaCuenta] = useState('');
   const [pagoCliente, setPagoCliente] = useState('');
   const [pageSize, setPageSize] = useState(10);
-  const [cuentasCache, setCuentasCache] = useState({}); // ✅ CACHE LOCAL
 
   const queryClient = useQueryClient();
 
-  // ✅ PRODUCTOS - SOLO UNA VEZ AL INICIO
+  // ✅ QUERY 1: Productos activos (1 sola vez)
   const { data: productosRaw, isLoading, error } = useQuery({
     queryKey: ['productos-pos'],
     queryFn: async () => axios.get('/api/productos/activos').then(res => res.data),
-    staleTime: 5 * 60 * 1000, // 5 minutos cache
+    staleTime: 5 * 60 * 1000,
   });
 
- const { data: cuentasRaw } = useQuery({
-  queryKey: ['cuentas-prestamo'], 
+  // ✅ QUERY 2: TODAS las cuentas (1 sola vez)
+const { data: cuentasRaw } = useQuery({
+  queryKey: ['cuentas-optimizadas-pos'],
   queryFn: async () => {
-    const res = await axios.get('/api/cuentas'); // ✅ TODAS las cuentas
+    const res = await axios.get('/api/cuentas/optimizadas-pos');
     return res.data;
   },
-  staleTime: 10 * 60 * 1000, // 10min cache
-  cacheTime: 15 * 60 * 1000, // 15min memoria
+  staleTime: 10 * 60 * 1000,
+  enabled: modoPrestamo,  // ✅ Lazy loading
 });
 
-
-  // ✅ CUENTAS OPTIMIZADAS - NO RELOAD CONSTANTEMENTE
-  const cuentas = Array.isArray(cuentasRaw) ? cuentasRaw : [];
-  //const cuentasCliente = useMemo(() => {
-  //  return cuentas.filter(c => c.saldo > 0);
-  //}, [cuentas]);
-  
-
   const productos = Array.isArray(productosRaw) ? productosRaw : productosRaw?.content || [];
+  const cuentas = Array.isArray(cuentasRaw) ? cuentasRaw : [];
+
+  // ✅ CACHÉ LOCAL - 0 queries adicionales
+  const cuentaSeleccionadaData = useMemo(() => {
+    if (!cuentaSeleccionada?.id || !cuentas.length) return null;
+    return cuentas.find(c => c.id === cuentaSeleccionada.id) || null;
+  }, [cuentaSeleccionada?.id, cuentas]);
 
   const productosFiltrados = productos
     .filter(p => {
@@ -63,20 +62,6 @@ export default function Venta() {
     const pago = Number(pagoCliente);
     return Number.isNaN(pago) ? 0 : Math.max(pago - total, 0);
   }, [pagoCliente, total]);
-
-  // ✅ OPTIMIZADO: Solo cuando cambia cuentaSeleccionada
-  const cuentaData = useQuery({
-    queryKey: ['cuenta-data', cuentaSeleccionada?.id],
-    queryFn: async () => {
-      if (!cuentaSeleccionada?.id) return null;
-      
-      // ✅ ENDPOINT OPTIMIZADO - 1 query en lugar de 3
-      const res = await axios.get(`/api/cuentas/${cuentaSeleccionada.id}/resumen`);
-      return res.data;
-    },
-    enabled: !!cuentaSeleccionada?.id && modoPrestamo,
-    staleTime: 30 * 1000, // 30s cache
-  });
 
   const agregarAlCarrito = (producto) => {
     const stock = producto.cantidad ?? 0;
@@ -187,28 +172,28 @@ export default function Venta() {
         ` por ${formatMoney(total)}${mensajeCambio}`
       );
 
+      // ✅ CAMBIO CRÍTICO: Solo pasar ID - 1 query optimizada
       if (window.confirm('¿Imprimir ticket?')) {
-        imprimirTicketVenta(ventaGuardada, { total, pagoCliente, cambio, modoPrestamo, cuentaSeleccionada });
+        imprimirTicketVenta(ventaGuardada.id);  // ✅ Backend trae TODO
       }
 
       limpiarVenta();
-      // ✅ INVALIDAR SOLO LO NECESARIO
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['productos-pos'] }),
         queryClient.invalidateQueries({ queryKey: ['cuentas-prestamo'] }),
       ]);
     } catch (err) {
       alert('❌ Error al guardar venta');
+      console.error(err);
     }
   };
 
   if (isLoading) return <div className="fs-6 text-center py-5">Cargando productos...</div>;
   if (error) return <div className="text-danger fs-6 text-center py-5">Error: {error.message}</div>;
 
-     return (
+  return (
     <div className="d-flex justify-content-center">
       <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '1.5rem 0' }}>
-        {/* HEADER OPTIMIZADO */}
         <div className="card-header py-3 bg-primary text-white border-bottom-0">
           <div className="row align-items-center">
             <div className="col-md-8">
@@ -224,7 +209,6 @@ export default function Venta() {
 
         <div className="card-body py-3">
           <div className="row g-3">
-            {/* COLUMNA IZQUIERDA - PRODUCTOS */}
             <div className="col-lg-8">
               <ProductoSearch
                 busqueda={busqueda}
@@ -244,9 +228,7 @@ export default function Venta() {
               />
             </div>
 
-            {/* COLUMNA DERECHA - PAGO */}
             <div className="col-lg-4">
-              {/* MODO PAGO */}
               <div className="card mb-3 hover-shadow" 
                    style={{ cursor: 'pointer', minHeight: '130px', transition: 'all 0.2s' }}
                    onClick={() => setModoPrestamo(!modoPrestamo)}
@@ -254,7 +236,6 @@ export default function Venta() {
                 <ModoPago modoPrestamo={modoPrestamo} setModoPrestamo={setModoPrestamo} />
               </div>
 
-              {/* CUENTA PRESTAMO - OPTIMIZADO */}
               {modoPrestamo && (
                 <CuentaPrestamo
                   cuentas={cuentas}
@@ -263,12 +244,10 @@ export default function Venta() {
                   busquedaCuenta={busquedaCuenta}
                   setBusquedaCuenta={setBusquedaCuenta}
                   formatMoney={formatMoney}
-                  cuentaData={cuentaData.data} // ✅ DATO OPTIMIZADO
-                  isLoadingCuenta={cuentaData.isLoading}
+                  cuentaData={cuentaSeleccionadaData}
                 />
               )}
 
-              {/* COBRO CONTADO */}
               {!modoPrestamo && (
                 <CobroContado
                   pagoCliente={pagoCliente}
@@ -292,7 +271,6 @@ export default function Venta() {
           </div>
         </div>
 
-        {/* FOOTER OPTIMIZADO */}
         <div className="card-footer bg-body-tertiary py-3 border-top">
           <div className="row g-2">
             <div className="col-md-6">

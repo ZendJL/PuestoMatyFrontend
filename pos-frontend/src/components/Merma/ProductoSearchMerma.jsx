@@ -8,7 +8,7 @@ export default function ProductoSearchMerma({
       <div className="card-body p-3">
         <div className="d-flex justify-content-between align-items-center mb-3">
           <h6 className="mb-0">
-            <i className="bi bi-gear-fill me-2 text-primary"/>Configuración
+            <i className="bi bi-gear-fill me-2 text-primary"/>Agregar Merma
           </h6>
         </div>
 

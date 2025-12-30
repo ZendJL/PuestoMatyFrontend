@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatMoney, formatFecha } from '../utils/format';
 import DataTable from './common/DataTable';
+import { imprimirRecibo } from './ReciboAbono';
 
 export default function Cuentas() {
   const [busqueda, setBusqueda] = useState('');
@@ -72,13 +73,22 @@ export default function Cuentas() {
     },
   });
 
-  // Mutación abono
+  // ✅ MUTACIÓN ABONO CON IMPRESIÓN
   const abonoMutation = useMutation({
     mutationFn: (monto) => axios.post(`/api/cuentas/${cuentaExpandida.id}/abonar?monto=${monto}`),
-    onSuccess: () => {
+    onSuccess: (response) => {
+      const abonoCreado = response.data;
       queryClient.invalidateQueries({ queryKey: ['cuentas-resumen'] });
       queryClient.invalidateQueries({ queryKey: ['cuenta-detalle', cuentaExpandida?.id] });
       setMontoAbono('');
+      
+      // ✅ PREGUNTAR SI IMPRIMIR
+      if (window.confirm('✅ Abono registrado correctamente.\n\n¿Desea imprimir el recibo?')) {
+        imprimirRecibo(abonoCreado, cuentaExpandida);
+      }
+    },
+    onError: (error) => {
+      alert('❌ Error al registrar abono: ' + (error.response?.data?.message || error.message));
     },
   });
 
@@ -257,7 +267,7 @@ export default function Cuentas() {
           {/* KPIs */}
           <div className="row g-3 mb-4">
             <div className="col-md-6">
-              <div className="border rounded p-3 bg-light">
+              <div className="border rounded p-3 ">
                 <div className="small text-body-secondary">Total Clientes</div>
                 <div className="fs-4 fw-bold text-primary">{totals.clientes}</div>
               </div>
@@ -324,7 +334,7 @@ export default function Cuentas() {
 
           {/* ✅ TABLA CON EDICIÓN INLINE Y BOTONES VERTICALES */}
           <div className="card mb-4 shadow-sm">
-            <div className="card-header py-2 bg-light d-flex justify-content-between align-items-center">
+            <div className="card-header py-2  d-flex justify-content-between align-items-center">
               <h6 className="mb-0">
                 <i className="bi bi-list-ul me-2"/>Resumen por Cliente
                 <span className="badge bg-secondary ms-2">{datosFiltrados.length}</span>
@@ -363,7 +373,7 @@ export default function Cuentas() {
                         ) : (
                           <>
                             <div className="fw-semibold" style={{ fontSize: '0.9rem' }}>{c.nombre}</div>
-                            {c.descripcion && <small className="text-body-secondary">{c.descripcion}</small>}
+                            {c.descripcion && <small className="">{c.descripcion}</small>}
                           </>
                         )}
                       </div>
@@ -472,7 +482,7 @@ export default function Cuentas() {
           {/* Detalle Cuenta */}
           {cuentaExpandida && (
             <div className="card mt-4 shadow-sm">
-              <div className="card-header d-flex justify-content-between align-items-center bg-light">
+              <div className="card-header d-flex justify-content-between align-items-center ">
                 <h6>
                   👤 {cuentaExpandida.nombre} 
                   <span className={`badge ms-2 fs-6 fw-semibold ${cuentaExpandida.saldo > 0 ? 'bg-danger' : 'bg-success'}`}>
@@ -537,7 +547,7 @@ export default function Cuentas() {
                     )}
 
                     <div className="p-4">
-                      {/* Abonos */}
+                      {/* ✅ ABONOS CON BOTÓN IMPRIMIR */}
                       {detalleCuenta.ultimosAbonos?.length > 0 ? (
                         <div className="mb-4">
                           <div className="d-flex justify-content-between align-items-center mb-3">
@@ -554,6 +564,7 @@ export default function Cuentas() {
                                   <th>Antes</th>
                                   <th>Después</th>
                                   <th>Fecha</th>
+                                  <th width="80">🖨️</th>
                                 </tr>
                               </thead>
                               <tbody>
@@ -563,6 +574,15 @@ export default function Cuentas() {
                                     <td>{formatMoney(abono.viejoSaldo)}</td>
                                     <td className="fw-bold text-primary">{formatMoney(abono.nuevoSaldo)}</td>
                                     <td><small className="text-muted">{formatFecha(abono.fecha)}</small></td>
+                                    <td>
+                                      <button
+                                        className="btn btn-sm btn-outline-primary"
+                                        onClick={() => imprimirRecibo(abono, cuentaExpandida)}
+                                        title="Reimprimir recibo"
+                                      >
+                                        <i className="bi bi-printer-fill"/>
+                                      </button>
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -639,7 +659,7 @@ export default function Cuentas() {
           {/* DETALLE PRODUCTOS */}
           {ventaSeleccionada && (
             <div className="card mt-4 shadow-sm">
-              <div className="card-header d-flex justify-content-between align-items-center bg-light">
+              <div className="card-header d-flex justify-content-between align-items-center ">
                 <h6>
                   📦 Productos Venta #{ventaSeleccionada.ventaId} 
                   <span className="badge bg-success ms-2 fs-6">{formatMoney(ventaSeleccionada.totalVenta)}</span>

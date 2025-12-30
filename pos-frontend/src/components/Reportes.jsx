@@ -22,14 +22,13 @@ export default function Reportes() {
         <div className="card-header p-0 bg-primary text-white">
           <div className="px-3 pt-2 pb-1 d-flex justify-content-between align-items-center">
             <h5 className="mb-0">Reportes</h5>
-            <span className="small text-white-50">Ventas, deudas y mermas</span>
+            <span className="small text-white-50">Ventas y mermas</span>
           </div>
 
           <ul className="nav nav-tabs card-header-tabs px-2 border-0 mt-1">
             {[
               { id: 'ventas', label: 'Ventas' },
               { id: 'ventasProducto', label: 'Ventas por producto' },
-              { id: 'deudas', label: 'Deudas no saldadas' },
               { id: 'mermas', label: 'Mermas' },
             ].map((t) => (
               <li className="nav-item" key={t.id}>
@@ -68,7 +67,6 @@ export default function Reportes() {
         <div className="card-body py-3 bg-body">
           {tab === 'ventas' && <ReporteVentasGenerales />}
           {tab === 'ventasProducto' && <ReporteVentasPorProducto />}
-          {tab === 'deudas' && <ReporteDeudas />}
           {tab === 'mermas' && <ReporteMermas />}
         </div>
       </div>

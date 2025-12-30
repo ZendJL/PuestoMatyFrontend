@@ -56,12 +56,36 @@ export default function ReporteVentasGenerales() {
   const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
   const [mostrarDesglose, setMostrarDesglose] = useState(false);
 
-  const { data: ventasRaw, isLoading, error } = useQuery({
-    queryKey: ['ventas-reporte-generales'],
+  // ✅ QUERY 1: Lista ventas OPTIMIZADA (1 query)
+  const { data: ventasRaw = [], isLoading, error } = useQuery({
+    queryKey: ['ventas-reporte-generales', desde, hasta],
     queryFn: async () => {
-      const res = await axios.get('/api/ventas');
+      const res = await axios.get(
+        `/api/ventas/reporte-generales?desde=${desde}&hasta=${hasta}`
+      );
       return res.data;
     },
+    enabled: !!desde && !!hasta,
+  });
+
+  // ✅ QUERY 2: Productos de venta seleccionada (1 query al clic)
+  const { data: productosVenta = [] } = useQuery({
+    queryKey: ['productos-venta', ventaSeleccionada?.id],
+    queryFn: async () => {
+      const res = await axios.get(`/api/ventas/${ventaSeleccionada.id}/productos`);
+      return res.data;
+    },
+    enabled: !!ventaSeleccionada?.id,
+  });
+
+  // ✅ QUERY 3: Desglose lotes OPTIMIZADO (1 query al clic)
+  const { data: desgloseLotes = [] } = useQuery({
+    queryKey: ['costos-lotes-opt', ventaSeleccionada?.id],
+    queryFn: async () => {
+      const res = await axios.get(`/api/ventas/${ventaSeleccionada.id}/costos-lotes-optimizado`);
+      return res.data;
+    },
+    enabled: !!ventaSeleccionada?.id && mostrarDesglose,
   });
 
   const ventas = Array.isArray(ventasRaw) ? ventasRaw : [];
@@ -69,53 +93,22 @@ export default function ReporteVentasGenerales() {
   const ventasFiltradas = useMemo(() => {
     if (!ventas.length) return [];
 
-    const dDesde = new Date(desde + 'T00:00:00');
-    const dHasta = new Date(hasta + 'T23:59:59');
-
-    let lista = ventas.filter((v) => {
-      if (!v.fecha) return false;
-      const f = new Date(v.fecha);
-      return f >= dDesde && f <= dHasta;
-    });
-
     const texto = busqueda.toLowerCase();
-    if (texto) {
-      lista = lista.filter((v) => {
-        const idStr = String(v.id ?? '');
-        const cuentaNombre = v.cuenta?.nombre ?? '';
-        const desc = v.descripcion ?? '';
-        return (
-          idStr.includes(texto) ||
-          cuentaNombre.toLowerCase().includes(texto) ||
-          desc.toLowerCase().includes(texto)
-        );
-      });
-    }
-
-    return lista;
-  }, [ventas, desde, hasta, busqueda]);
+    return ventas.filter((v) => {
+      const idStr = String(v.id ?? '');
+      const cuentaNombre = v.cuenta?.nombre ?? '';
+      return (
+        idStr.includes(texto) ||
+        cuentaNombre.toLowerCase().includes(texto)
+      );
+    });
+  }, [ventas, busqueda]);
 
   const totalVentas = ventasFiltradas.length;
-  const totalImporte = ventasFiltradas.reduce(
-    (sum, v) => sum + (v.total || 0),
-    0
-  );
+  const totalImporte = ventasFiltradas.reduce((sum, v) => sum + (v.total || 0), 0);
   const totalPrestamos = ventasFiltradas
     .filter((v) => v.status === 'PRESTAMO')
     .reduce((sum, v) => sum + (v.total || 0), 0);
-
-  // Ganancia total del período (usa costoTotal de venta_productos)
-  const gananciaTotalGeneral = ventasFiltradas.reduce((acum, v) => {
-    const gananciaVenta = (v.ventaProductos || []).reduce((s, vp) => {
-      const precioVenta = vp.precioUnitario ?? vp.precio ?? 0;
-      const cantidad = vp.cantidad || 0;
-      const costoTotal = vp.costoTotal ?? vp.costo_total ?? 0;
-      const costoUnitario = cantidad > 0 ? costoTotal / cantidad : 0;
-      const gananciaUnidad = precioVenta - costoUnitario;
-      return s + cantidad * gananciaUnidad;
-    }, 0);
-    return acum + gananciaVenta;
-  }, 0);
 
   const aplicarPeriodo = (nuevoTipo) => {
     setTipoPeriodo(nuevoTipo);
@@ -130,64 +123,45 @@ export default function ReporteVentasGenerales() {
     setMostrarDesglose(false);
   };
 
-  const reimprimirTicket = () => {
-    if (!ventaSeleccionada) return;
+const reimprimirTicket = () => {
+  if (!ventaSeleccionada) return;
+  console.log(ventaSeleccionada.id);
+ imprimirTicketVenta(ventaSeleccionada.id);
+ /* const total = Number(ventaSeleccionada.total || 0);
+  const pagoCliente = Number(ventaSeleccionada.pagoCliente ?? ventaSeleccionada.total ?? 0);
+  const cambio = Math.max(pagoCliente - total, 0);
 
-    const total = Number(ventaSeleccionada.total || 0);
-    const pagoCliente = Number(
-      ventaSeleccionada.pagoCliente ?? ventaSeleccionada.total ?? 0
-    );
-    const cambio = Math.max(pagoCliente - total, 0);
+  imprimirTicketVenta(ventaSeleccionada, {
+    total,
+    pagoCliente,
+    cambio,
+    modoPrestamo: ventaSeleccionada.status === 'PRESTAMO',
+    cuentaSeleccionada: ventaSeleccionada.cuenta || null,
+    productosVenta  // ✅ PASAR productosVenta al ticket
+  });*/
+};
 
-    imprimirTicketVenta(ventaSeleccionada, {
-      total,
-      pagoCliente,
-      cambio,
-      modoPrestamo: ventaSeleccionada.status === 'PRESTAMO',
-      cuentaSeleccionada: ventaSeleccionada.cuenta || null,
-    });
-  };
-
-  // Carga del desglose por lotes cuando se pide
-  const { data: desgloseLotes = [] } = useQuery({
-    queryKey: ['costos-lotes', ventaSeleccionada?.id],
-    queryFn: async () => {
-      const res = await axios.get(
-        `/api/ventas/${ventaSeleccionada.id}/costos-lotes`
-      );
-      return res.data;
-    },
-    enabled: !!ventaSeleccionada?.id && mostrarDesglose,
-  });
 
   if (isLoading) {
-    return <div className="fs-6">Cargando ventas...</div>;
+    return <div className="fs-6 text-center py-5">Cargando ventas...</div>;
   }
   if (error) {
-    return <div className="text-danger fs-6">Error al cargar ventas</div>;
+    return <div className="text-danger fs-6 text-center py-5">Error al cargar ventas</div>;
   }
 
-  const totalDetalle = ventaSeleccionada
-    ? Number(ventaSeleccionada.total || 0)
-    : 0;
-  const pagoDetalle = ventaSeleccionada
-    ? Number(
-        ventaSeleccionada.pagoCliente ?? ventaSeleccionada.total ?? 0
-      )
-    : 0;
+  const totalDetalle = ventaSeleccionada ? Number(ventaSeleccionada.total || 0) : 0;
+  const pagoDetalle = ventaSeleccionada ? Number(ventaSeleccionada.pagoCliente ?? ventaSeleccionada.total ?? 0) : 0;
   const cambioDetalle = Math.max(pagoDetalle - totalDetalle, 0);
 
-  // Ganancia SOLO de la venta seleccionada
-  const gananciaVentaSeleccionada = ventaSeleccionada
-    ? (ventaSeleccionada.ventaProductos || []).reduce((s, vp) => {
-        const precioVenta = vp.precioUnitario ?? vp.precio ?? 0;
-        const cantidad = vp.cantidad || 0;
-        const costoTotal = vp.costoTotal ?? vp.costo_total ?? 0;
-        const costoUnitario = cantidad > 0 ? costoTotal / cantidad : 0;
-        const gananciaUnidad = precioVenta - costoUnitario;
-        return s + cantidad * gananciaUnidad;
-      }, 0)
-    : 0;
+  // ✅ Ganancia con productos optimizados
+  const gananciaVentaSeleccionada = productosVenta.reduce((s, vp) => {
+    const precioVenta = vp.precioUnitario ?? 0;
+    const cantidad = vp.cantidad || 0;
+    const costoTotal = vp.costoTotal ?? 0;
+    const costoUnitario = cantidad > 0 ? costoTotal / cantidad : 0;
+    const gananciaUnidad = precioVenta - costoUnitario;
+    return s + cantidad * gananciaUnidad;
+  }, 0);
 
   const columnasVentas = [
     {
@@ -208,7 +182,6 @@ export default function ReporteVentasGenerales() {
       accessor: (v) => v.fecha,
       sortable: true,
       filterable: true,
-      filterPlaceholder: 'AAAA-MM-DD',
       render: (v) => (v.fecha ? formatFecha(v.fecha) : ''),
       sortFn: (a, b) => new Date(a) - new Date(b),
       defaultSortDirection: 'desc',
@@ -219,11 +192,7 @@ export default function ReporteVentasGenerales() {
       style: { width: 140 },
       accessor: (v) =>
         v.status === 'PRESTAMO'
-          ? v.cuenta?.nombre
-            ? v.cuenta.nombre
-            : v.cuentaId
-            ? `Cuenta ${v.cuentaId}`
-            : 'Préstamo'
+          ? (v.cuenta?.nombre ?? `Cuenta ${v.cuentaId ?? ''}`) || 'Préstamo'
           : 'Contado',
       sortable: true,
       filterable: true,
@@ -288,14 +257,12 @@ export default function ReporteVentasGenerales() {
           </div>
           <div className="text-end">
             <div className="small text-white-50">Total vendido</div>
-            <div className="fs-5 fw-bold">
-              {formatMoney(totalImporte)}
-            </div>
+            <div className="fs-5 fw-bold">{formatMoney(totalImporte)}</div>
           </div>
         </div>
 
         <div className="card-body py-3 bg-body">
-          {/* Resumen */}
+          {/* Resumen KPIs */}
           <div className="row g-3 mb-3">
             <div className="col-md-3">
               <div className="border rounded p-2 bg-body">
@@ -306,25 +273,19 @@ export default function ReporteVentasGenerales() {
             <div className="col-md-3">
               <div className="border rounded p-2 bg-body">
                 <div className="small text-body-primary">Importe total</div>
-                <div className="fs-5 fw-bold text-success">
-                  {formatMoney(totalImporte)}
-                </div>
+                <div className="fs-5 fw-bold text-success">{formatMoney(totalImporte)}</div>
               </div>
             </div>
             <div className="col-md-3">
               <div className="border rounded p-2 bg-body">
                 <div className="small text-body-primary">Préstamos</div>
-                <div className="fs-5 fw-bold text-warning">
-                  {formatMoney(totalPrestamos)}
-                </div>
+                <div className="fs-5 fw-bold text-warning">{formatMoney(totalPrestamos)}</div>
               </div>
             </div>
             <div className="col-md-3">
               <div className="border rounded p-2 bg-body">
-                <div className="small text-body-primary">Ganancia total</div>
-                <div className="fs-5 fw-bold text-primary">
-                  {formatMoney(gananciaTotalGeneral)}
-                </div>
+                <div className="small text-body-primary">Ganancia venta #{ventaSeleccionada?.id || ''}</div>
+                <div className="fs-5 fw-bold text-primary">{formatMoney(gananciaVentaSeleccionada)}</div>
               </div>
             </div>
           </div>
@@ -333,40 +294,32 @@ export default function ReporteVentasGenerales() {
           <div className="border rounded p-2 mb-3 bg-body">
             <div className="row g-2 align-items-end">
               <div className="col-md-4">
-                <label className="form-label mb-1">Período rápido</label>
+                <label className="form-label mb-1 small">Período rápido</label>
                 <div className="btn-group btn-group-sm w-100" role="group">
                   <button
                     type="button"
-                    className={`btn btn-outline-primary ${
-                      tipoPeriodo === 'dia' ? 'active' : ''
-                    }`}
+                    className={`btn btn-outline-primary ${tipoPeriodo === 'dia' ? 'active' : ''}`}
                     onClick={() => aplicarPeriodo('dia')}
                   >
                     Hoy
                   </button>
                   <button
                     type="button"
-                    className={`btn btn-outline-primary ${
-                      tipoPeriodo === 'semana' ? 'active' : ''
-                    }`}
+                    className={`btn btn-outline-primary ${tipoPeriodo === 'semana' ? 'active' : ''}`}
                     onClick={() => aplicarPeriodo('semana')}
                   >
                     Semana
                   </button>
                   <button
                     type="button"
-                    className={`btn btn-outline-primary ${
-                      tipoPeriodo === 'mes' ? 'active' : ''
-                    }`}
+                    className={`btn btn-outline-primary ${tipoPeriodo === 'mes' ? 'active' : ''}`}
                     onClick={() => aplicarPeriodo('mes')}
                   >
                     Mes
                   </button>
                   <button
                     type="button"
-                    className={`btn btn-outline-primary ${
-                      tipoPeriodo === 'rango' ? 'active' : ''
-                    }`}
+                    className={`btn btn-outline-primary ${tipoPeriodo === 'rango' ? 'active' : ''}`}
                     onClick={() => aplicarPeriodo('rango')}
                   >
                     Rango
@@ -375,7 +328,7 @@ export default function ReporteVentasGenerales() {
               </div>
 
               <div className="col-auto">
-                <label className="form-label mb-1">Desde</label>
+                <label className="form-label mb-1 small">Desde</label>
                 <input
                   type="date"
                   className="form-control form-control-sm"
@@ -384,7 +337,7 @@ export default function ReporteVentasGenerales() {
                 />
               </div>
               <div className="col-auto">
-                <label className="form-label mb-1">Hasta</label>
+                <label className="form-label mb-1 small">Hasta</label>
                 <input
                   type="date"
                   className="form-control form-control-sm"
@@ -394,11 +347,11 @@ export default function ReporteVentasGenerales() {
               </div>
 
               <div className="col-md-3">
-                <label className="form-label mb-1">Buscar venta</label>
+                <label className="form-label mb-1 small">Buscar venta</label>
                 <input
                   type="text"
                   className="form-control form-control-sm"
-                  placeholder="ID, nombre de cuenta, descripción..."
+                  placeholder="ID, nombre de cuenta..."
                   value={busqueda}
                   onChange={(e) => setBusqueda(e.target.value)}
                 />
@@ -415,13 +368,14 @@ export default function ReporteVentasGenerales() {
             <div className="col-md-7">
               <div className="card h-100">
                 <div className="card-header py-2 d-flex justify-content-between align-items-center bg-body-tertiary">
-                  <h6 className="mb-0">Ventas</h6>
+                  <h6 className="mb-0">
+                    <i className="bi bi-list-ul me-2" />Ventas
+                  </h6>
                   <small className="text-body-primary">
-                    Clic en encabezados para ordenar y usa los filtros por
-                    columna.
+                    Clic para ver detalle • {totalVentas} ventas encontradas
                   </small>
                 </div>
-                <div className="card-body p-0 bg-body">
+                <div className="card-body p-0">
                   <DataTable
                     columns={columnasVentas}
                     data={ventasFiltradas}
@@ -435,155 +389,107 @@ export default function ReporteVentasGenerales() {
               </div>
             </div>
 
-            {/* Detalle de venta seleccionada */}
+            {/* Detalle de venta */}
             <div className="col-md-5 mt-3 mt-md-0">
               <div className="card h-100">
                 <div className="card-header py-2 d-flex justify-content-between align-items-center bg-body-tertiary">
-                  <h6 className="mb-0">Detalle de venta</h6>
+                  <h6 className="mb-0">
+                    <i className="bi bi-receipt me-2" />Venta #{ventaSeleccionada?.id || ''}
+                  </h6>
                   <div className="d-flex gap-1">
                     <button
-                      type="button"
                       className="btn btn-sm btn-outline-primary"
                       disabled={!ventaSeleccionada}
-                      onClick={() =>
-                        setMostrarDesglose((v) => !v)
-                      }
+                      onClick={() => setMostrarDesglose(!mostrarDesglose)}
                     >
-                      {mostrarDesglose
-                        ? 'Ocultar desglose'
-                        : 'Ver desglose costos'}
+                      {mostrarDesglose ? '← Ocultar lotes' : 'Ver lotes'}
                     </button>
                     <button
-                      type="button"
                       className="btn btn-sm btn-outline-secondary"
                       disabled={!ventaSeleccionada}
                       onClick={reimprimirTicket}
                     >
-                      Reimprimir ticket
+                      <i className="bi bi-printer" /> Ticket
                     </button>
                   </div>
                 </div>
-                <div className="card-body p-2 bg-body">
+                <div className="card-body p-2">
                   {!ventaSeleccionada && (
-                    <div className="text-muted small">
-                      Selecciona una venta para ver sus productos.
+                    <div className="text-muted small text-center py-4">
+                      <i className="bi bi-arrow-right-circle fs-1 opacity-50 mb-2 d-block" />
+                      Selecciona una venta para ver productos
                     </div>
                   )}
 
                   {ventaSeleccionada && (
                     <>
-                      <div className="small mb-2">
-                        <div>
-                          <strong>Folio:</strong> {ventaSeleccionada.id}
-                        </div>
-                        <div>
-                          <strong>Fecha:</strong>{' '}
-                          {ventaSeleccionada.fecha
-                            ? formatFecha(ventaSeleccionada.fecha)
-                            : ''}
-                        </div>
-                        <div>
-                          <strong>Tipo:</strong>{' '}
-                          {ventaSeleccionada.status === 'PRESTAMO'
-                            ? 'Préstamo'
-                            : 'Contado'}
-                        </div>
-                        <div>
-                          <strong>Total venta:</strong>{' '}
-                          {formatMoney(totalDetalle)}
-                        </div>
-                        <div>
-                          <strong>Ganancia total:</strong>{' '}
-                          {formatMoney(gananciaVentaSeleccionada)}
-                        </div>
-                        <div>
-                          <strong>Pago del cliente:</strong>{' '}
-                          {formatMoney(pagoDetalle)}
-                        </div>
-                        <div>
-                          <strong>Cambio:</strong>{' '}
-                          {formatMoney(cambioDetalle)}
+                      {/* Resumen venta */}
+                      <div className="small mb-3 p-2  rounded">
+                        <div className="row g-2 mb-2">
+                          <div className="col-6">
+                            <strong>Folio:</strong> {ventaSeleccionada.id}
+                          </div>
+                          <div className="col-6 text-end">
+                            <span className={`badge fs-6 ${ventaSeleccionada.status === 'PRESTAMO' ? 'bg-warning text-dark' : 'bg-success'}`}>
+                              {ventaSeleccionada.status === 'PRESTAMO' ? 'Préstamo' : 'Contado'}
+                            </span>
+                          </div>
+                          <div className="col-12">
+                            <strong>Fecha:</strong> {formatFecha(ventaSeleccionada.fecha)}
+                          </div>
+                          <div className="col-6">
+                            <strong>Total:</strong> {formatMoney(totalDetalle)}
+                          </div>
+                          <div className="col-6 text-end">
+                            <strong>Ganancia:</strong> <span className="text-success fw-bold">{formatMoney(gananciaVentaSeleccionada)}</span>
+                          </div>
                         </div>
                       </div>
 
-                      <div
-                        className="border rounded"
-                        style={{ maxHeight: 260, overflowY: 'auto' }}
-                      >
-                        <table className="table table-sm table-striped mb-0 align-middle">
+                      {/* Productos */}
+                      <div className="border rounded mb-2" style={{ maxHeight: 220, overflowY: 'auto' }}>
+                        <table className="table table-sm table-striped mb-0">
                           <thead className="table-light sticky-top">
                             <tr>
                               <th>Producto</th>
-                              <th className="text-center" style={{ width: 70 }}>
-                                Cant.
-                              </th>
-                              <th className="text-end" style={{ width: 90 }}>
-                                P. venta
-                              </th>
-                              <th className="text-end" style={{ width: 110 }}>
-                                Ganancia producto
-                              </th>
-                              <th className="text-end" style={{ width: 110 }}>
-                                Importe
-                              </th>
+                              <th className="text-center" style={{ width: 60 }}>Cant.</th>
+                              <th className="text-end" style={{ width: 80 }}>P/U</th>
+                              <th className="text-end" style={{ width: 90 }}>Ganancia</th>
+                              <th className="text-end" style={{ width: 90 }}>Total</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {ventaSeleccionada.ventaProductos?.map((vp) => {
-                              const precioVenta =
-                                vp.precioUnitario ?? vp.precio ?? 0;
+                            {productosVenta.map((vp) => {
+                              const precioVenta = vp.precioUnitario ?? 0;
                               const cantidad = vp.cantidad || 0;
-                              const costoTotal =
-                                vp.costoTotal ?? vp.costo_total ?? 0;
-                              const costoUnitario =
-                                cantidad > 0 ? costoTotal / cantidad : 0;
-                              const gananciaUnidad =
-                                precioVenta - costoUnitario;
-                              const gananciaProducto =
-                                gananciaUnidad * cantidad;
+                              const costoTotal = vp.costoTotal ?? 0;
+                              const costoUnitario = cantidad > 0 ? costoTotal / cantidad : 0;
+                              const gananciaUnidad = precioVenta - costoUnitario;
+                              const gananciaProducto = gananciaUnidad * cantidad;
                               const importe = cantidad * precioVenta;
 
                               return (
                                 <tr key={vp.id}>
-                                  <td className="small">
-                                    {vp.producto?.descripcion ||
-                                      `Producto ${vp.producto?.id}`}
-                                    <div className="text-muted small">
-                                      Código: {vp.producto?.codigo}
-                                    </div>
+                                  <td className="pe-0 small">
+                                    <div>{vp.producto?.descripcion || `Prod ${vp.producto?.id}`}</div>
+                                    <small className="text-muted">{vp.producto?.codigo}</small>
                                   </td>
-                                  <td className="text-center">
-                                    {cantidad}
-                                  </td>
+                                  <td className="text-center fw-bold">{cantidad}</td>
+                                  <td className="text-end small">${precioVenta.toFixed(2)}</td>
                                   <td className="text-end">
-                                    {formatMoney(precioVenta)}
-                                  </td>
-                                  <td className="text-end">
-                                    <span
-                                      className={
-                                        gananciaProducto >= 0
-                                          ? 'text-success fw-semibold'
-                                          : 'text-danger fw-semibold'
-                                      }
-                                    >
+                                    <span className={gananciaProducto >= 0 ? 'text-success fw-semibold' : 'text-danger fw-semibold'}>
                                       {formatMoney(gananciaProducto)}
                                     </span>
                                   </td>
-                                  <td className="text-end fw-semibold">
-                                    {formatMoney(importe)}
-                                  </td>
+                                  <td className="text-end fw-bold text-success">{formatMoney(importe)}</td>
                                 </tr>
                               );
                             })}
 
-                            {(!ventaSeleccionada.ventaProductos ||
-                              ventaSeleccionada.ventaProductos.length === 0) && (
+                            {productosVenta.length === 0 && (
                               <tr>
-                                <td
-                                  colSpan={5}
-                                  className="text-center text-muted py-3"
-                                >
-                                  Esta venta no tiene productos asociados.
+                                <td colSpan={5} className="text-center text-muted py-3">
+                                  Sin productos en esta venta
                                 </td>
                               </tr>
                             )}
@@ -591,89 +497,40 @@ export default function ReporteVentasGenerales() {
                         </table>
                       </div>
 
+                      {/* Desglose lotes */}
                       {mostrarDesglose && (
                         <div className="mt-2">
-                          <div className="small fw-semibold mb-1">
-                            Desglose de costos por lotes
+                          <div className="small fw-semibold mb-1 text-primary">
+                            📦 Desglose costos por lotes ({desgloseLotes.length})
                           </div>
-                          <div
-                            className="border rounded bg-body"
-                            style={{ maxHeight: 200, overflowY: 'auto' }}
-                          >
-                            <table className="table table-sm table-striped mb-0 align-middle">
+                          <div className="border rounded bg-body" style={{ maxHeight: 180, overflowY: 'auto' }}>
+                            <table className="table table-sm table-striped mb-0">
                               <thead className="table-light sticky-top">
                                 <tr>
                                   <th>Producto</th>
-                                  <th
-                                    className="text-end"
-                                    style={{ width: 90 }}
-                                  >
-                                    Lote ID
-                                  </th>
-                                  <th
-                                    className="text-end"
-                                    style={{ width: 130 }}
-                                  >
-                                    Fecha compra
-                                  </th>
-                                  <th
-                                    className="text-end"
-                                    style={{ width: 90 }}
-                                  >
-                                    Cant.
-                                  </th>
-                                  <th
-                                    className="text-end"
-                                    style={{ width: 100 }}
-                                  >
-                                    Costo unit.
-                                  </th>
-                                  <th
-                                    className="text-end"
-                                    style={{ width: 110 }}
-                                  >
-                                    Costo total
-                                  </th>
+                                  <th className="text-end" style={{ width: 70 }}>Lote</th>
+                                  <th className="text-end" style={{ width: 110 }}>Fecha compra</th>
+                                  <th className="text-end" style={{ width: 60 }}>Cant.</th>
+                                  <th className="text-end" style={{ width: 80 }}>C/U</th>
+                                  <th className="text-end" style={{ width: 90 }}>Total</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {desgloseLotes.map((lote, idx) => (
                                   <tr key={idx}>
-                                    <td className="small">
-                                      {lote.productoDescripcion}
-                                    </td>
-                                    <td className="text-end">
-                                      {lote.loteId}
-                                    </td>
-                                    <td className="text-end">
-                                      {lote.fechaCompra
-                                        ? formatFecha(lote.fechaCompra)
-                                        : ''}
-                                    </td>
-                                    <td className="text-end">
-                                      {lote.cantidad}
-                                    </td>
-                                    <td className="text-end">
-                                      {formatMoney(
-                                        lote.costoUnitario || 0
-                                      )}
-                                    </td>
-                                    <td className="text-end">
-                                      {formatMoney(
-                                        lote.costoTotal || 0
-                                      )}
-                                    </td>
+                                    <td className="pe-0 small">{lote.productoDescripcion}</td>
+                                    <td className="text-end small">#{lote.loteId}</td>
+                                    <td className="text-end small">{formatFecha(lote.fechaCompra)}</td>
+                                    <td className="text-end fw-bold">{lote.cantidad}</td>
+                                    <td className="text-end small">{formatMoney(lote.costoUnitario)}</td>
+                                    <td className="text-end fw-bold text-danger">{formatMoney(lote.costoTotal)}</td>
                                   </tr>
                                 ))}
 
                                 {desgloseLotes.length === 0 && (
                                   <tr>
-                                    <td
-                                      colSpan={6}
-                                      className="text-center text-muted small py-2"
-                                    >
-                                      No hay desglose de costos disponible para
-                                      esta venta.
+                                    <td colSpan={6} className="text-center text-muted small py-2">
+                                      Sin lotes en esta venta
                                     </td>
                                   </tr>
                                 )}

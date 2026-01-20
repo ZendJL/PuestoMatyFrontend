@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { formatMoney } from '../../utils/format';
+import { imprimirCodigoBarras } from '../../utils/PrintBarcode'; // ⭐ IMPORTAR
 
 export default function ProductosPanel({
   productoSeleccionado,
@@ -99,6 +100,20 @@ export default function ProductosPanel({
     }
   };
 
+  // ⭐ FUNCIÓN PARA REIMPRIMIR CÓDIGO DE BARRAS
+  const handleReimprimirCodigo = async () => {
+    if (!productoSeleccionado) return;
+    
+    const exito = await imprimirCodigoBarras({
+      codigo: productoSeleccionado.codigo,
+      descripcion: productoSeleccionado.descripcion
+    });
+    
+    if (exito) {
+      alert('🖨️ Código de barras enviado a impresora');
+    }
+  };
+
   if (!productoSeleccionado) {
     return (
       <div className="card shadow-sm h-100">
@@ -118,12 +133,22 @@ export default function ProductosPanel({
           <h6 className="mb-0 fw-bold">
             <i className="bi bi-box-seam me-2"/> {productoSeleccionado.descripcion}
           </h6>
-          <button 
-            className="btn btn-sm btn-outline-light" 
-            onClick={limpiarSeleccion}
-          >
-            <i className="bi bi-x"/>Limpiar
-          </button>
+          <div className="d-flex gap-2">
+            {/* ⭐ BOTÓN REIMPRIMIR CÓDIGO */}
+            <button 
+              className="btn btn-sm btn-outline-light" 
+              onClick={handleReimprimirCodigo}
+              title="Reimprimir código de barras"
+            >
+              <i className="bi bi-printer-fill me-1"/>Reimprimir
+            </button>
+            <button 
+              className="btn btn-sm btn-outline-light" 
+              onClick={limpiarSeleccion}
+            >
+              <i className="bi bi-x"/>Limpiar
+            </button>
+          </div>
         </div>
       </div>
       

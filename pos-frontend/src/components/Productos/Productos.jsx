@@ -606,6 +606,7 @@ const handleImprimirTodosGenerados = async () => {
                 setCodigoEdit={setCodigoEdit}
                 limpiarSeleccion={limpiarSeleccion}
                 queryClient={queryClient}
+                productos={productos}
               />
             </div>
           </div>

@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { formatMoney } from '../../utils/format';
-import { imprimirCodigoBarras } from '../../utils/PrintBarcode'; // ⭐ IMPORTAR
+import { imprimirCodigoBarras } from '../../utils/PrintBarcode';
+
 
 export default function ProductosPanel({
   productoSeleccionado,
@@ -19,8 +20,23 @@ export default function ProductosPanel({
   codigoEdit,
   setCodigoEdit,
   limpiarSeleccion,
-  queryClient
+  queryClient,
+  productos // ⭐ NUEVA PROP
 }) {
+  
+  // ⭐ FUNCIÓN PARA VALIDAR CÓDIGO DUPLICADO (EXCLUYENDO EL PRODUCTO ACTUAL)
+  const validarCodigoDuplicado = (codigoNuevo) => {
+    if (!codigoNuevo || !codigoNuevo.trim()) return null;
+    
+    const codigoNormalizado = codigoNuevo.trim().toLowerCase();
+    
+    // Buscar si existe otro producto con el mismo código (excluyendo el actual)
+    return productos.find(p => 
+      p.id !== productoSeleccionado.id && 
+      p.codigo?.toLowerCase() === codigoNormalizado
+    ) || null;
+  };
+
   const agregarStock = async () => {
     if (!productoSeleccionado) return;
 
@@ -67,6 +83,7 @@ export default function ProductosPanel({
     const nuevoPrecioCompra = precioCompraEdit === ''
       ? productoSeleccionado.precioCompra
       : Number(precioCompraEdit);
+    const nuevoCodigo = codigoEdit.trim() || productoSeleccionado.codigo;
 
     if (!nuevaDescripcion) {
       alert('La descripción no puede estar vacía');
@@ -77,10 +94,24 @@ export default function ProductosPanel({
       return;
     }
 
+    // ⭐ VALIDAR CÓDIGO DUPLICADO ANTES DE ACTUALIZAR
+    const duplicado = validarCodigoDuplicado(nuevoCodigo);
+    
+    if (duplicado) {
+      alert(
+        `⚠️ El código "${nuevoCodigo}" ya está asignado a otro producto:\n\n` +
+        `Producto: ${duplicado.descripcion}\n` +
+        `Precio: $${duplicado.precio}\n` +
+        `ID: ${duplicado.id}\n\n` +
+        `Por favor, usa un código diferente.`
+      );
+      return; // ⭐ NO PERMITIR GUARDAR
+    }
+
     try {
       const body = {
         ...productoSeleccionado,
-        codigo: codigoEdit.trim() || productoSeleccionado.codigo,
+        codigo: nuevoCodigo,
         descripcion: nuevaDescripcion,
         precio: nuevoPrecio,
         precioCompra: nuevoPrecioCompra,
@@ -209,6 +240,10 @@ export default function ProductosPanel({
                   value={codigoEdit}
                   onChange={(e) => setCodigoEdit(e.target.value)}
                 />
+                <small className="text-muted">
+                  <i className="bi bi-info-circle me-1"/>
+                  Cambiar con precaución
+                </small>
               </div>
               <div className="col-md-6">
                 <label className="form-label fw-semibold mb-2">Descripción</label>

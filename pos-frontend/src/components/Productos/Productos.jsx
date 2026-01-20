@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import ProductoSearchProductos from './ProductoSearchProductos';
 import ProductosPanel from './ProductosPanel';
-import { imprimirCodigoBarras } from '../../utils/PrintBarcode'; // ⭐ IMPORTAR
+import { imprimirCodigoBarras } from '../../utils/PrintBarcode';
 
 const estadoInicial = {
   codigo: '',
@@ -12,7 +12,34 @@ const estadoInicial = {
   precioCompra: '',
   proveedor: '',
   cantidad: '',
-  imprimirCodigo: false, // ⭐ NUEVO CAMPO
+  imprimirCodigo: false,
+};
+
+// ⭐ GENERADOR DE CÓDIGOS ÚNICOS
+const generarCodigoUnico = (codigosExistentes) => {
+  const prefijo = '99'; // Prefijo para códigos internos (no comerciales)
+  const min = 10000000; // 8 dígitos después del prefijo
+  const max = 99999999;
+
+  let intentos = 0;
+  const maxIntentos = 100;
+
+  while (intentos < maxIntentos) {
+    const numero = Math.floor(Math.random() * (max - min + 1)) + min;
+    const codigoGenerado = `${prefijo}${numero}`;
+
+    // Verificar que no exista en la BD
+    if (!codigosExistentes.includes(codigoGenerado)) {
+      return codigoGenerado;
+    }
+
+    intentos++;
+  }
+
+  // Si falla, usar timestamp + random
+  const timestamp = Date.now().toString().slice(-8);
+  const random = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+  return `${prefijo}${timestamp}${random}`.slice(0, 10);
 };
 
 export default function Productos() {
@@ -28,8 +55,9 @@ export default function Productos() {
   const [precioCompraEdit, setPrecioCompraEdit] = useState('');
   const [activoEdit, setActivoEdit] = useState(true);
   const [codigoEdit, setCodigoEdit] = useState('');
-  
+
   const inputBusquedaRef = useRef(null);
+  const inputCodigoRef = useRef(null); // ⭐ REF PARA INPUT DE CÓDIGO
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -37,7 +65,7 @@ export default function Productos() {
       inputBusquedaRef.current?.focus();
       console.log('🎯 AUTOFOCUS aplicado en Productos');
     }, 150);
-    
+
     return () => clearTimeout(timer);
   }, []);
 
@@ -52,8 +80,8 @@ export default function Productos() {
   const productos = Array.isArray(productosRaw)
     ? productosRaw
     : Array.isArray(productosRaw?.content)
-    ? productosRaw.content
-    : [];
+      ? productosRaw.content
+      : [];
 
   const seleccionarProducto = useCallback((producto) => {
     setProductoSeleccionado(producto);
@@ -66,7 +94,7 @@ export default function Productos() {
     setCantidadAgregar('');
     setPrecioCompraAgregar(producto.precioCompra != null ? String(producto.precioCompra) : '');
     setCodigoEscaneado('');
-    
+
     setTimeout(() => {
       inputBusquedaRef.current?.focus();
     }, 50);
@@ -82,11 +110,11 @@ export default function Productos() {
       const esInput = elementoActivo?.tagName === 'INPUT';
       const esTextarea = elementoActivo?.tagName === 'TEXTAREA';
       const esSelect = elementoActivo?.tagName === 'SELECT';
-      
-      const esBuscadorTexto = 
+
+      const esBuscadorTexto =
         elementoActivo === inputBusquedaRef.current &&
         elementoActivo?.type === 'text';
-      
+
       if ((esInput || esTextarea || esSelect) && !esBuscadorTexto) {
         if (escaneando) {
           console.log('🧹 LIMPIANDO - Input activo');
@@ -102,14 +130,14 @@ export default function Productos() {
         if (bufferEscaner.current.length > 0) {
           e.preventDefault();
           e.stopPropagation();
-          
+
           const codigo = bufferEscaner.current.trim();
           console.log('🔍 CÓDIGO ESCANEADO:', codigo);
-          
+
           const producto = productos.find(
             p => p.codigo?.toString().trim() === codigo
           );
-          
+
           if (producto) {
             console.log('✅ ENCONTRADO:', producto.descripcion);
             seleccionarProducto(producto);
@@ -122,7 +150,7 @@ export default function Productos() {
               alert('✅ Código cargado en "Nuevo Producto". Completa los datos y guarda.');
             }
           }
-          
+
           bufferEscaner.current = '';
           escaneando = false;
           setCodigoEscaneado('');
@@ -196,28 +224,44 @@ export default function Productos() {
     ) || null;
   };
 
+  // ⭐ HANDLER PARA GENERAR CÓDIGO ALEATORIO
+  const handleGenerarCodigo = () => {
+    const codigosExistentes = productos.map(p => p.codigo?.toString() || '');
+    const nuevoCodigo = generarCodigoUnico(codigosExistentes);
+
+    setForm(prev => ({ ...prev, codigo: nuevoCodigo }));
+
+    console.log('🎲 CÓDIGO GENERADO:', nuevoCodigo);
+  };
+
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setForm((prev) => ({ 
-      ...prev, 
-      [name]: type === 'checkbox' ? checked : value 
+    setForm((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
     }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!form.codigo || !form.descripcion || !form.precio || !form.cantidad) {
       alert('Código, descripción, precio y cantidad son obligatorios');
       return;
     }
 
+    // ⭐ VERIFICAR SI EL CÓDIGO YA EXISTE
     const existente = buscarProductoPorCodigoODescripcion(form.codigo, form.descripcion);
-    
+
     if (existente) {
-      seleccionarProducto(existente);
-      alert('⚠️ Producto encontrado. ✅ Formulario de edición auto-llenado.');
-      return;
+      // ⭐ NO HACER INSERT, SOLO SELECCIONAR EL INPUT
+      alert(`⚠️ El código "${form.codigo}" ya existe en la base de datos.\n\nProducto: ${existente.descripcion}\nPrecio: $${existente.precio}`);
+
+      // Enfocar el input de código para que el usuario corrija
+      inputCodigoRef.current?.focus();
+      inputCodigoRef.current?.select();
+
+      return; // NO continuar con el insert
     }
 
     try {
@@ -233,22 +277,21 @@ export default function Productos() {
       };
 
       const response = await axios.post('/api/productos', producto);
-      
-      // ⭐ IMPRIMIR CÓDIGO DE BARRAS SI ESTÁ MARCADO
+
       if (form.imprimirCodigo) {
         await imprimirCodigoBarras({
           codigo: response.data.codigo || form.codigo,
           descripcion: response.data.descripcion || form.descripcion
-        }, false); // false = no mostrar alert adicional
+        }, false);
       }
-      
-      alert('✅ Nuevo producto creado correctamente' + 
-            (form.imprimirCodigo ? ' y código enviado a impresora' : ''));
-      
+
+      alert('✅ Nuevo producto creado correctamente' +
+        (form.imprimirCodigo ? ' y código enviado a impresora' : ''));
+
       setForm(estadoInicial);
       queryClient.invalidateQueries({ queryKey: ['productos-altas'] });
       queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
-      
+
       setTimeout(() => {
         inputBusquedaRef.current?.focus();
       }, 50);
@@ -271,7 +314,7 @@ export default function Productos() {
     setPrecioCompraAgregar('');
     setBusquedaProducto('');
     setCodigoEscaneado('');
-    
+
     setTimeout(() => {
       inputBusquedaRef.current?.focus();
     }, 50);
@@ -303,23 +346,38 @@ export default function Productos() {
                 <div className="card-body p-3">
                   <div className="d-flex justify-content-between align-items-center mb-3">
                     <h6 className="mb-0">
-                      <i className="bi bi-plus-circle-fill me-2 text-success"/>Nuevo Producto
+                      <i className="bi bi-plus-circle-fill me-2 text-success" />Nuevo Producto
                     </h6>
                   </div>
-                  
+
                   <form onSubmit={handleSubmit} className="row g-2">
                     <div className="col-12">
                       <label className="form-label fw-semibold mb-1 small">Código *</label>
                       <input
+                        ref={inputCodigoRef}
                         type="text"
                         name="codigo"
                         className="form-control form-control-sm"
                         value={form.codigo}
                         onChange={handleChange}
-                        placeholder="Escanear código..."
+                        placeholder="Escanear o generar código..."
                         required
                       />
+                      <button
+                        type="button"
+                        className="btn btn-success w-100 mt-2 btn-sm fw-bold"
+                        onClick={handleGenerarCodigo}
+                        title="Generar código aleatorio único"
+                      >
+                        <i className="bi bi-dice-5-fill me-2" />
+                        Generar Código Aleatorio
+                      </button>
+                      <small className="text-muted d-block mt-1">
+                        <i className="bi bi-info-circle me-1" />
+                        Códigos internos: formato 99XXXXXXXX
+                      </small>
                     </div>
+
                     <div className="col-12">
                       <label className="form-label fw-semibold mb-1 small">Descripción *</label>
                       <input
@@ -385,7 +443,6 @@ export default function Productos() {
                         onChange={handleChange}
                       />
                     </div>
-                    {/* ⭐ CHECKBOX PARA IMPRIMIR */}
                     <div className="col-12">
                       <div className="form-check">
                         <input
@@ -397,7 +454,7 @@ export default function Productos() {
                           onChange={handleChange}
                         />
                         <label className="form-check-label small fw-semibold" htmlFor="imprimirCodigo">
-                          <i className="bi bi-printer-fill me-1"/> Imprimir código de barras
+                          <i className="bi bi-printer-fill me-1" /> Imprimir código de barras
                         </label>
                       </div>
                     </div>
@@ -433,7 +490,7 @@ export default function Productos() {
                 codigoEscaneado={codigoEscaneado}
                 inputBusquedaRef={inputBusquedaRef}
               />
-              
+
               <ProductosPanel
                 productoSeleccionado={productoSeleccionado}
                 cantidadAgregar={cantidadAgregar}

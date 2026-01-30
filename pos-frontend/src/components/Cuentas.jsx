@@ -184,18 +184,19 @@ export default function Cuentas() {
 
   return (
     <div className="d-flex justify-content-center">
-      <div className="card shadow-sm fs-6 w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '1.5rem 0' }}>
-        <div className="card-header py-3 d-flex justify-content-between align-items-center bg-primary text-white">
-          <div>
-            <h5 className="mb-0">💰 Cuentas por Cobrar</h5>
-            <small>
-              {totals.clientes} cliente{totals.clientes !== 1 ? 's' : ''} | 
-              {formatMoney(totals.saldoTotal)} pendiente
-              {soloDeudores && <span className="badge bg-danger ms-2">Solo Deudores</span>}
+      <div className="card shadow-sm fs-6 w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '0.25rem 0' }}>
+        {/* ✅ HEADER ULTRA COMPACTO Y MÁS ARRIBA */}
+        <div className="card-header p-2 bg-primary text-white border-bottom-0 d-flex justify-content-between align-items-center" style={{ minHeight: '48px' }}>
+          <div className="d-flex align-items-center h-100">
+            <h6 className="mb-0 me-2" style={{ fontSize: '0.95rem', lineHeight: 1.1 }}>💰 Cuentas Cobrar</h6>
+            <small className="opacity-75" style={{ fontSize: '0.7rem' }}>
+              {totals.clientes} | {formatMoney(totals.saldoTotal)}
+              {soloDeudores && <span className="badge bg-danger ms-1" style={{ fontSize: '0.6rem' }}>Deudores</span>}
             </small>
           </div>
           <button 
-            className="btn btn-success btn-sm fw-bold shadow-sm"
+            className="btn btn-success btn-sm fw-bold px-2 py-1"
+            style={{ fontSize: '0.75rem' }}
             onClick={() => setMostrarNuevoCliente(true)}
           >
             <i className="bi bi-plus-circle-fill me-1"/>Nuevo Cliente
@@ -207,22 +208,22 @@ export default function Cuentas() {
           <div className="card-header bg-success-subtle border-bottom py-3">
             <div className="row g-3 align-items-end">
               <div className="col-lg-4 col-md-5">
-                <label className="form-label fw-semibold mb-1 small">Nombre del cliente *</label>
+                <label className="form-label fw-semibold mb-1 small">Nombre *</label>
                 <input
                   type="text"
                   className="form-control form-control-lg"
-                  placeholder="Ej: Juan Pérez"
+                  placeholder="Juan Pérez"
                   value={nuevoCliente.nombre}
                   onChange={(e) => setNuevoCliente({...nuevoCliente, nombre: e.target.value})}
                   autoFocus
                 />
               </div>
               <div className="col-lg-5 col-md-4">
-                <label className="form-label fw-semibold mb-1 small">Descripción (opcional)</label>
+                <label className="form-label fw-semibold mb-1 small">Descripción</label>
                 <input
                   type="text"
                   className="form-control form-control-lg"
-                  placeholder="Teléfono, dirección, notas..."
+                  placeholder="Teléfono, notas..."
                   value={nuevoCliente.descripcion}
                   onChange={(e) => setNuevoCliente({...nuevoCliente, descripcion: e.target.value})}
                 />
@@ -236,12 +237,12 @@ export default function Cuentas() {
                   >
                     {nuevaCuentaMutation.isPending ? (
                       <>
-                        <span className="spinner-border spinner-border-sm me-2" role="status"/>
+                        <span className="spinner-border spinner-border-sm me-2"/>
                         Creando...
                       </>
                     ) : (
                       <>
-                        <i className="bi bi-check-circle-fill me-1"/>Crear Cliente
+                        <i className="bi bi-check-circle-fill me-1"/>Crear
                       </>
                     )}
                   </button>
@@ -258,7 +259,7 @@ export default function Cuentas() {
               </div>
             </div>
             <div className="mt-2 small text-success">
-              <i className="bi bi-info-circle me-1"/>Saldo inicial: $0.00 (se actualizará con ventas)
+              <i className="bi bi-info-circle me-1"/>Saldo inicial: $0.00
             </div>
           </div>
         )}
@@ -267,7 +268,7 @@ export default function Cuentas() {
           {/* KPIs */}
           <div className="row g-3 mb-4">
             <div className="col-md-6">
-              <div className="border rounded p-3 ">
+              <div className="border rounded p-3">
                 <div className="small text-body-secondary">Total Clientes</div>
                 <div className="fs-4 fw-bold text-primary">{totals.clientes}</div>
               </div>
@@ -286,7 +287,7 @@ export default function Cuentas() {
           <div className="border rounded p-3 mb-4 bg-body-tertiary">
             <div className="row g-3 align-items-end">
               <div className="col-md-5">
-                <label className="form-label mb-1 small fw-semibold">🔍 Buscar cliente</label>
+                <label className="form-label mb-1 small fw-semibold">🔍 Buscar</label>
                 <input
                   type="text" 
                   className="form-control form-control-lg"
@@ -296,7 +297,7 @@ export default function Cuentas() {
                 />
               </div>
               <div className="col-md-4">
-                <label className="form-label mb-1 small fw-semibold">Filas por página</label>
+                <label className="form-label mb-1 small fw-semibold">Filas</label>
                 <select 
                   className="form-select" 
                   value={pageSize} 
@@ -315,11 +316,11 @@ export default function Cuentas() {
                 >
                   {soloDeudores ? (
                     <>
-                      <i className="bi bi-people-fill me-1"/>Mostrar Todos
+                      <i className="bi bi-people-fill me-1"/>Todos
                     </>
                   ) : (
                     <>
-                      <i className="bi bi-exclamation-triangle-fill me-1"/>Solo Deudores
+                      <i className="bi bi-exclamation-triangle-fill me-1"/>Deudores
                     </>
                   )}
                 </button>
@@ -327,16 +328,16 @@ export default function Cuentas() {
             </div>
             {soloDeudores && (
               <div className="mt-2 p-2 bg-danger-subtle border rounded small">
-                <i className="bi bi-info-circle me-1"/> Mostrando {totals.clientes} deudor{totals.clientes !== 1 ? 'es' : ''} con saldo mayor a $0
+                <i className="bi bi-info-circle me-1"/> {totals.clientes} deudor{totals.clientes !== 1 ? 'es' : ''}
               </div>
             )}
           </div>
 
           {/* ✅ TABLA CON EDICIÓN INLINE Y BOTONES VERTICALES */}
           <div className="card mb-4 shadow-sm">
-            <div className="card-header py-2  d-flex justify-content-between align-items-center">
+            <div className="card-header py-2 d-flex justify-content-between align-items-center">
               <h6 className="mb-0">
-                <i className="bi bi-list-ul me-2"/>Resumen por Cliente
+                <i className="bi bi-list-ul me-2"/>Resumen Cliente
                 <span className="badge bg-secondary ms-2">{datosFiltrados.length}</span>
               </h6>
             </div>
@@ -482,7 +483,7 @@ export default function Cuentas() {
           {/* Detalle Cuenta */}
           {cuentaExpandida && (
             <div className="card mt-4 shadow-sm">
-              <div className="card-header d-flex justify-content-between align-items-center ">
+              <div className="card-header d-flex justify-content-between align-items-center">
                 <h6>
                   👤 {cuentaExpandida.nombre} 
                   <span className={`badge ms-2 fs-6 fw-semibold ${cuentaExpandida.saldo > 0 ? 'bg-danger' : 'bg-success'}`}>
@@ -522,7 +523,7 @@ export default function Cuentas() {
                             />
                           </div>
                           <div className="col-md-4">
-                            <small className="text-muted">Máximo: {formatMoney(cuentaExpandida.saldo)}</small>
+                            <small className="text-muted">Máx: {formatMoney(cuentaExpandida.saldo)}</small>
                           </div>
                           <div className="col-md-3">
                             <button 
@@ -537,7 +538,7 @@ export default function Cuentas() {
                                 </>
                               ) : (
                                 <>
-                                  <i className="bi bi-check-circle-fill me-2"/>Registrar Abono
+                                  <i className="bi bi-check-circle-fill me-2"/>Abono
                                 </>
                               )}
                             </button>
@@ -552,7 +553,7 @@ export default function Cuentas() {
                         <div className="mb-4">
                           <div className="d-flex justify-content-between align-items-center mb-3">
                             <h6>
-                              <i className="bi bi-receipt me-2"/>Últimos Abonos 
+                              <i className="bi bi-receipt me-2"/>Abonos 
                               <span className="badge bg-info ms-2">{detalleCuenta.ultimosAbonos.length}</span>
                             </h6>
                           </div>
@@ -591,7 +592,7 @@ export default function Cuentas() {
                         </div>
                       ) : (
                         <div className="alert alert-info mb-4">
-                          <i className="bi bi-info-circle me-2"/>Sin abonos registrados
+                          <i className="bi bi-info-circle me-2"/>Sin abonos
                         </div>
                       )}
 
@@ -600,7 +601,7 @@ export default function Cuentas() {
                         <div>
                           <div className="d-flex justify-content-between align-items-center mb-3">
                             <h6>
-                              <i className="bi bi-cart me-2"/>Últimas Ventas 
+                              <i className="bi bi-cart me-2"/>Ventas 
                               <span className="badge bg-primary ms-2">{detalleCuenta.ultimasVentas.length}</span>
                             </h6>
                           </div>
@@ -642,14 +643,14 @@ export default function Cuentas() {
                         </div>
                       ) : (
                         <div className="alert alert-info">
-                          <i className="bi bi-info-circle me-2"/>Sin ventas registradas
+                          <i className="bi bi-info-circle me-2"/>Sin ventas
                         </div>
                       )}
                     </div>
                   </>
                 ) : (
                   <div className="p-4 text-center text-muted">
-                    No se pudo cargar el detalle de la cuenta
+                    No se pudo cargar el detalle
                   </div>
                 )}
               </div>
@@ -659,9 +660,9 @@ export default function Cuentas() {
           {/* DETALLE PRODUCTOS */}
           {ventaSeleccionada && (
             <div className="card mt-4 shadow-sm">
-              <div className="card-header d-flex justify-content-between align-items-center ">
+              <div className="card-header d-flex justify-content-between align-items-center">
                 <h6>
-                  📦 Productos Venta #{ventaSeleccionada.ventaId} 
+                  📦 Productos #{ventaSeleccionada.ventaId} 
                   <span className="badge bg-success ms-2 fs-6">{formatMoney(ventaSeleccionada.totalVenta)}</span>
                 </h6>
                 <button 
@@ -702,7 +703,7 @@ export default function Cuentas() {
                           </tr>
                         ))}
                         <tr className="table-group-divider">
-                          <td colSpan={4} className="text-end fw-bold fs-5 text-primary">TOTAL VENTA:</td>
+                          <td colSpan={4} className="text-end fw-bold fs-5 text-primary">TOTAL:</td>
                           <td className="text-end fs-4 fw-bold text-success">
                             {formatMoney(ventaSeleccionada.totalVenta)}
                           </td>
@@ -712,7 +713,7 @@ export default function Cuentas() {
                   </div>
                 ) : (
                   <div className="p-4 text-center text-muted">
-                    No hay productos en esta venta
+                    No hay productos
                   </div>
                 )}
               </div>
@@ -723,10 +724,10 @@ export default function Cuentas() {
           <div className="card-footer bg-body-tertiary py-3 text-center text-muted small">
             <div className="row">
               <div className="col-md-6">
-                Total clientes en sistema: {cuentasResumen?.length || 0}
+                Total sistema: {cuentasResumen?.length || 0}
               </div>
               <div className="col-md-6 text-md-end">
-                Última actualización: {new Date().toLocaleTimeString()}
+                {new Date().toLocaleTimeString()}
               </div>
             </div>
           </div>

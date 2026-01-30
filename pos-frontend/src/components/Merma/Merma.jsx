@@ -28,7 +28,7 @@ export default function Merma() {
   const [fechaDesde, setFechaDesde] = useState(new Date().toISOString().slice(0, 10));
   const [fechaHasta, setFechaHasta] = useState(new Date().toISOString().slice(0, 10));
   
-  const inputBusquedaRef = useRef(null); // ⭐ REF para autofocus
+  const inputBusquedaRef = useRef(null);
   const costoTimeoutRef = useRef(null);
 
   // ⭐ AUTOFOCUS al montar componente
@@ -58,7 +58,7 @@ export default function Merma() {
     staleTime: 5 * 60 * 1000,
   });
 
-    const agregarItemMerma = useCallback((producto) => {
+  const agregarItemMerma = useCallback((producto) => {
     setItemsMerma(prev => {
       const existe = prev.find(i => i.id === producto.id);
       const inventario = producto.cantidad ?? 0;
@@ -84,101 +84,101 @@ export default function Merma() {
       inputBusquedaRef.current?.focus();
     }, 50);
   }, []);
+
   // ⭐ LISTENER GLOBAL DE ESCANEO
-useEffect(() => {
-  const bufferEscaner = { current: '' };
-  let timerEscaner = null;
-  let escaneando = false;
+  useEffect(() => {
+    const bufferEscaner = { current: '' };
+    let timerEscaner = null;
+    let escaneando = false;
 
-  const handleEscaneo = (e) => {
-    // ⭐ SOLO ignorar inputs NUMÉRICOS y TEXTAREAS
-    const elementoActivo = document.activeElement;
-    const esInputNumerico = elementoActivo?.type === 'number';
-    const esTextarea = elementoActivo?.tagName === 'TEXTAREA';
-    
-    if (esInputNumerico || esTextarea) {
-      if (escaneando) {
-        console.log('🧹 LIMPIANDO - Input numérico/textarea activo');
-        bufferEscaner.current = '';
-        escaneando = false;
-        setCodigoEscaneado('');
-        clearTimeout(timerEscaner);
-      }
-      return;
-    }
-
-    // ENTER - Procesar código
-    if (e.key === 'Enter') {
-      if (bufferEscaner.current.length > 0) {
-        e.preventDefault();
-        e.stopPropagation();
-        
-        const codigo = bufferEscaner.current.trim();
-        console.log('🔍 CÓDIGO COMPLETO:', codigo, '(longitud:', codigo.length, ')');
-        
-        const producto = productos.find(
-          p => p.codigo?.toString().trim() === codigo
-        );
-        
-        if (producto) {
-          console.log('✅ ENCONTRADO:', producto.descripcion);
-          agregarItemMerma(producto);
-        } else {
-          console.log('❌ NO ENCONTRADO:', codigo);
-          alert(`Código "${codigo}" no encontrado`);
+    const handleEscaneo = (e) => {
+      // ⭐ SOLO ignorar inputs NUMÉRICOS y TEXTAREAS
+      const elementoActivo = document.activeElement;
+      const esInputNumerico = elementoActivo?.type === 'number';
+      const esTextarea = elementoActivo?.tagName === 'TEXTAREA';
+      
+      if (esInputNumerico || esTextarea) {
+        if (escaneando) {
+          console.log('🧹 LIMPIANDO - Input numérico/textarea activo');
+          bufferEscaner.current = '';
+          escaneando = false;
+          setCodigoEscaneado('');
+          clearTimeout(timerEscaner);
         }
-        
-        // ⭐ LIMPIEZA TOTAL
+        return;
+      }
+
+      // ENTER - Procesar código
+      if (e.key === 'Enter') {
+        if (bufferEscaner.current.length > 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          
+          const codigo = bufferEscaner.current.trim();
+          console.log('🔍 CÓDIGO COMPLETO:', codigo, '(longitud:', codigo.length, ')');
+          
+          const producto = productos.find(
+            p => p.codigo?.toString().trim() === codigo
+          );
+          
+          if (producto) {
+            console.log('✅ ENCONTRADO:', producto.descripcion);
+            agregarItemMerma(producto);
+          } else {
+            console.log('❌ NO ENCONTRADO:', codigo);
+            alert(`Código "${codigo}" no encontrado`);
+          }
+          
+          // ⭐ LIMPIEZA TOTAL
+          bufferEscaner.current = '';
+          escaneando = false;
+          setCodigoEscaneado('');
+          clearTimeout(timerEscaner);
+          timerEscaner = null;
+          console.log('✅ BUFFER RESETEADO');
+        }
+        return;
+      }
+
+      // SOLO NÚMEROS
+      if (!/^[0-9]$/.test(e.key)) {
+        return;
+      }
+
+      // ⭐ CAPTURAR NÚMEROS
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (!escaneando) {
+        console.log('🔢 INICIO ESCANEO');
+        escaneando = true;
+        bufferEscaner.current = '';
+        setCodigoEscaneado('');
+      }
+
+      bufferEscaner.current += e.key;
+      console.log('🔢 +', e.key, '→ BUFFER:', bufferEscaner.current);
+      setCodigoEscaneado(bufferEscaner.current);
+
+      // ⭐ TIMEOUT MÁS LARGO (500ms en lugar de 300ms)
+      clearTimeout(timerEscaner);
+      timerEscaner = setTimeout(() => {
+        console.log('⏱️ TIMEOUT - Buffer incompleto:', bufferEscaner.current);
         bufferEscaner.current = '';
         escaneando = false;
         setCodigoEscaneado('');
-        clearTimeout(timerEscaner);
-        timerEscaner = null;
-        console.log('✅ BUFFER RESETEADO');
-      }
-      return;
-    }
+      }, 500);
+    };
 
-    // SOLO NÚMEROS
-    if (!/^[0-9]$/.test(e.key)) {
-      return;
-    }
+    window.addEventListener('keydown', handleEscaneo, true);
+    console.log('✅ ESCÁNER MERMA ACTIVADO');
 
-    // ⭐ CAPTURAR NÚMEROS
-    e.preventDefault();
-    e.stopPropagation();
-
-    if (!escaneando) {
-      console.log('🔢 INICIO ESCANEO');
-      escaneando = true;
-      bufferEscaner.current = '';
-      setCodigoEscaneado('');
-    }
-
-    bufferEscaner.current += e.key;
-    console.log('🔢 +', e.key, '→ BUFFER:', bufferEscaner.current);
-    setCodigoEscaneado(bufferEscaner.current);
-
-    // ⭐ TIMEOUT MÁS LARGO (500ms en lugar de 300ms)
-    clearTimeout(timerEscaner);
-    timerEscaner = setTimeout(() => {
-      console.log('⏱️ TIMEOUT - Buffer incompleto:', bufferEscaner.current);
-      bufferEscaner.current = '';
-      escaneando = false;
-      setCodigoEscaneado('');
-    }, 500); // ⭐ 500ms en lugar de 300ms
-  };
-
-  window.addEventListener('keydown', handleEscaneo, true);
-  console.log('✅ ESCÁNER MERMA ACTIVADO');
-
-  return () => {
-    window.removeEventListener('keydown', handleEscaneo, true);
-    if (timerEscaner) clearTimeout(timerEscaner);
-    console.log('❌ ESCÁNER MERMA DESACTIVADO');
-  };
-}, [productos]);
-
+    return () => {
+      window.removeEventListener('keydown', handleEscaneo, true);
+      if (timerEscaner) clearTimeout(timerEscaner);
+      console.log('❌ ESCÁNER MERMA DESACTIVADO');
+    };
+  }, [productos]);
 
   // ✅ FILTRADO LOCAL
   const productosFiltrados = useMemo(() => {
@@ -247,8 +247,6 @@ useEffect(() => {
   }, [itemsMerma]);
 
   const totalItems = itemsMerma.reduce((sum, i) => sum + (i.cantidad || 0), 0);
-
-
 
   const quitarItem = useCallback((id) => {
     setItemsMerma(prev => prev.filter(i => i.id !== id));
@@ -320,24 +318,21 @@ useEffect(() => {
 
   return (
     <div className="d-flex justify-content-center">
-      <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '1.5rem 0' }}>
-        <div className="card-header py-3 bg-primary text-white border-bottom-0">
-          <div className="row align-items-center">
+      <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '0.25rem 0' }}>
+        {/* ✅ HEADER ULTRA COMPACTO Y MÁS ARRIBA */}
+        <div className="card-header p-2 bg-primary text-white border-bottom-0" style={{ minHeight: '48px' }}>
+          <div className="row align-items-center g-0 h-100">
             <div className="col-md-8">
-              <h5 className="mb-1">📦 Registro de Merma</h5>
-              <small className="opacity-75">
-                Caducados, dañados, uso personal, robo
-                {codigoEscaneado.length > 0 && ' | 🔢 ESCÁNER ACTIVO'}
-              </small>
-              {ultimoCostoTotal > 0 && (
-                <small className="opacity-75 d-block mt-1">
-                  Última: <strong>{formatMoney(ultimoCostoTotal)}</strong>
+              <div className="d-flex align-items-center h-100">
+                <h6 className="mb-0 me-2" style={{ fontSize: '0.95rem', lineHeight: 1.1 }}>📦 Registro Merma</h6>
+                <small className="opacity-75" style={{ fontSize: '0.7rem' }}>
+                  {codigoEscaneado.length > 0 && '🔢 '}
                 </small>
-              )}
+              </div>
             </div>
             <div className="col-md-4 text-end">
-              <div className="fs-3 fw-bold text-warning">{formatMoney(costoEstimado)}</div>
-              <small>{totalItems} items</small>
+              <div className="fw-bold text-warning" style={{ fontSize: '1.4rem', lineHeight: 1.1 }}>{formatMoney(costoEstimado)}</div>
+              <small className="opacity-75" style={{ fontSize: '0.65rem' }}>{totalItems} items</small>
             </div>
           </div>
         </div>

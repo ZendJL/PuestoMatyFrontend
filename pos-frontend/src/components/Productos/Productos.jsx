@@ -5,7 +5,6 @@ import ProductoSearchProductos from './ProductoSearchProductos';
 import ProductosPanel from './ProductosPanel';
 import { imprimirCodigoBarras, imprimirCodigosBarrasMasivo} from '../../utils/PrintBarcode';
 
-
 const estadoInicial = {
   codigo: '',
   descripcion: '',
@@ -15,7 +14,6 @@ const estadoInicial = {
   cantidad: '',
   imprimirCodigo: false,
 };
-
 
 // ⭐ GENERADOR DE CÓDIGOS ÚNICOS
 const generarCodigoUnico = (codigosExistentes) => {
@@ -44,7 +42,6 @@ const generarCodigoUnico = (codigosExistentes) => {
   return `${prefijo}${timestamp}${random}`.slice(0, 10);
 };
 
-
 export default function Productos() {
   const [form, setForm] = useState(estadoInicial);
   const [guardando, setGuardando] = useState(false);
@@ -58,11 +55,11 @@ export default function Productos() {
   const [precioCompraEdit, setPrecioCompraEdit] = useState('');
   const [activoEdit, setActivoEdit] = useState(true);
   const [codigoEdit, setCodigoEdit] = useState('');
-  const [imprimiendoTodos, setImprimiendoTodos] = useState(false); // ⭐ NUEVO ESTADO
-  const [soloActivos, setSoloActivos] = useState(true); // ⭐ CHECKBOX FILTRO ACTIVOS
+  const [imprimiendoTodos, setImprimiendoTodos] = useState(false);
+  const [soloActivos, setSoloActivos] = useState(true);
 
   const inputBusquedaRef = useRef(null);
-  const inputCodigoRef = useRef(null); // ⭐ REF PARA INPUT DE CÓDIGO
+  const inputCodigoRef = useRef(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -253,48 +250,42 @@ export default function Productos() {
     console.log('🎲 CÓDIGO GENERADO:', nuevoCodigo);
   };
 
-// ⭐ HANDLER PARA IMPRIMIR TODOS LOS CÓDIGOS GENERADOS (CON ORDEN ALFABÉTICO)
-const handleImprimirTodosGenerados = async () => {
-  if (productosGenerados.length === 0) {
-    alert('❌ No hay productos con códigos generados (99) para imprimir');
-    return;
-  }
+  // ⭐ HANDLER PARA IMPRIMIR TODOS LOS CÓDIGOS GENERADOS (CON ORDEN ALFABÉTICO)
+  const handleImprimirTodosGenerados = async () => {
+    if (productosGenerados.length === 0) {
+      alert('❌ No hay productos con códigos generados (99) para imprimir');
+      return;
+    }
 
-  const tipoProductos = soloActivos ? 'activos' : 'totales (activos e inactivos)';
-  const confirmacion = true //confirm(
-   // `🖨️ ¿Deseas imprimir ${productosGenerados.length} código(s) de barras ${tipoProductos}?\n\n` +
-    //`Se abrirá una sola ventana con todos los códigos ordenados alfabéticamente.`
-  //);
+    const tipoProductos = soloActivos ? 'activos' : 'totales (activos e inactivos)';
+    const confirmacion = true
 
-  if (!confirmacion) return;
+    if (!confirmacion) return;
 
-  try {
-    setImprimiendoTodos(true);
+    try {
+      setImprimiendoTodos(true);
 
-    // ⭐ ORDENAR ALFABÉTICAMENTE POR DESCRIPCIÓN
-    const productosOrdenados = [...productosGenerados].sort((a, b) => {
-      const descA = (a.descripcion || '').toLowerCase();
-      const descB = (b.descripcion || '').toLowerCase();
-      return descA.localeCompare(descB, 'es', { sensitivity: 'base' });
-    });
+      // ⭐ ORDENAR ALFABÉTICAMENTE POR DESCRIPCIÓN
+      const productosOrdenados = [...productosGenerados].sort((a, b) => {
+        const descA = (a.descripcion || '').toLowerCase();
+        const descB = (b.descripcion || '').toLowerCase();
+        return descA.localeCompare(descB, 'es', { sensitivity: 'base' });
+      });
 
-    console.log('📋 Productos ordenados alfabéticamente:', 
-      productosOrdenados.map(p => p.descripcion).join(', ')
-    );
+      console.log('📋 Productos ordenados alfabéticamente:', 
+        productosOrdenados.map(p => p.descripcion).join(', ')
+      );
 
-    // ⭐ IMPRIMIR TODOS EN UNA SOLA VENTANA (YA ORDENADOS)
-    await imprimirCodigosBarrasMasivo(productosOrdenados);
+      // ⭐ IMPRIMIR TODOS EN UNA SOLA VENTANA (YA ORDENADOS)
+      await imprimirCodigosBarrasMasivo(productosOrdenados);
 
-    //alert(`✅ Se prepararon ${productosOrdenados.length} código(s) para impresión (ordenados A-Z)`);
-
-  } catch (error) {
-    console.error('❌ Error al imprimir códigos:', error);
-    alert('❌ Error al preparar la impresión. Revisa la consola.');
-  } finally {
-    setImprimiendoTodos(false);
-  }
-};
-
+    } catch (error) {
+      console.error('❌ Error al imprimir códigos:', error);
+      alert('❌ Error al preparar la impresión. Revisa la consola.');
+    } finally {
+      setImprimiendoTodos(false);
+    }
+  };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -384,52 +375,52 @@ const handleImprimirTodosGenerados = async () => {
 
   return (
     <div className="d-flex justify-content-center">
-      <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '1.5rem 0' }}>
-        <div className="card-header py-3 bg-primary text-white border-bottom-0">
-          <div className="row align-items-center">
+      <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '0.25rem 0' }}>
+        {/* ✅ HEADER ULTRA COMPACTO Y MÁS ARRIBA */}
+        <div className="card-header p-2 bg-primary text-white border-bottom-0" style={{ minHeight: '48px' }}>
+          <div className="row align-items-center g-0 h-100">
             <div className="col-md-5">
-              <h5 className="mb-1">📦 Gestión de Productos</h5>
-              <small className="opacity-75">
-                Alta automática + inventario y edición (⏎=Enter)
-                {codigoEscaneado.length > 0 && ' | 🔢 ESCÁNER ACTIVO'}
-              </small>
+              <div className="d-flex align-items-center h-100">
+                <h6 className="mb-0 me-2" style={{ fontSize: '0.95rem', lineHeight: 1.1 }}>📦 Gestión Productos</h6>
+                <small className="opacity-75" style={{ fontSize: '0.7rem' }}>
+                  {codigoEscaneado.length > 0 && '🔢 '}
+                </small>
+              </div>
             </div>
             <div className="col-md-3 text-center">
-              <div className="fs-3 fw-bold">{totalProductos}</div>
-              <small className="opacity-75">Total | {productosActivos} activos</small>
+              <div className="fs-4 fw-bold" style={{ fontSize: '1.2rem' }}>{totalProductos}</div>
+              <small className="opacity-75" style={{ fontSize: '0.65rem' }}>{productosActivos} activos</small>
             </div>
             {/* ⭐ BOTÓN Y CHECKBOX PARA IMPRIMIR CÓDIGOS GENERADOS */}
             <div className="col-md-4 text-end">
-              <div className="d-flex flex-column align-items-end gap-2">
+              <div className="d-flex flex-column align-items-end gap-1">
                 <button
-                  className="btn btn-light btn-sm fw-bold"
+                  className="btn btn-light btn-sm fw-bold px-2 py-1"
+                  style={{ fontSize: '0.75rem' }}
                   onClick={handleImprimirTodosGenerados}
                   disabled={imprimiendoTodos || productosGenerados.length === 0}
                   title={`Imprimir ${productosGenerados.length} códigos generados (99)`}
-                >
+                >Imprimir Códigos generados
                   {imprimiendoTodos ? (
                     <>
-                      <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-                      Imprimiendo...
+                      <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                      Impr...
                     </>
                   ) : (
                     <>
-                      <i className="bi bi-printer-fill me-2" />
-                      Imprimir Códigos ({productosGenerados.length})
+                      <i className="bi bi-printer-fill me-1" />
+                      ({productosGenerados.length})
                     </>
                   )}
                 </button>
-                <div className="form-check">
+                <div className="form-check  form-switch-sm">
                   <input
                     className="form-check-input"
                     type="checkbox"
                     id="soloActivosCheck"
                     checked={soloActivos}
                     onChange={(e) => setSoloActivos(e.target.checked)}
-                  />
-                  <label className="form-check-label small" htmlFor="soloActivosCheck">
-                    Solo productos activos
-                  </label>
+                  />Sólo activos
                 </div>
               </div>
             </div>

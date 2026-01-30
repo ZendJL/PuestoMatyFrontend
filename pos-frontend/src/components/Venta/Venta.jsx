@@ -14,8 +14,8 @@ const DENOMINACIONES = [20, 30, 40, 50, 100, 150, 200, 250, 500, 1000];
 
 export default function Venta() {
   const [venta, setVenta] = useState([]);
-  const [busquedaInput, setBusquedaInput] = useState('');
-  const [busqueda, setBusqueda] = useState('');
+  const [busquedaCodigo, setBusquedaCodigo] = useState(''); // ⭐ ESTADO PARA CÓDIGO
+  const [busquedaNombre, setBusquedaNombre] = useState(''); // ⭐ ESTADO PARA NOMBRE
   const [codigoEscaneado, setCodigoEscaneado] = useState('');
   const [modoPrestamo, setModoPrestamo] = useState(false);
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null);
@@ -23,7 +23,7 @@ export default function Venta() {
   const [pagoCliente, setPagoCliente] = useState('');
   const [pageSize, setPageSize] = useState(10);
   
-  const inputBusquedaRef = useRef(null); // ⭐ REF para autofocus
+  const inputBusquedaRef = useRef(null);
   const queryClient = useQueryClient();
 
   // ✅ QUERIES
@@ -60,7 +60,6 @@ export default function Venta() {
     let escaneando = false;
 
     const handleEscaneo = (e) => {
-      // ⭐ SOLO ignorar inputs NUMÉRICOS y TEXTAREAS
       const elementoActivo = document.activeElement;
       const esInputNumerico = elementoActivo?.type === 'number';
       const esTextarea = elementoActivo?.tagName === 'TEXTAREA';
@@ -108,7 +107,6 @@ export default function Venta() {
         return;
       }
 
-      // ⭐ CAPTURAR NÚMEROS (incluso en input de búsqueda)
       e.preventDefault();
       e.stopPropagation();
 
@@ -142,31 +140,30 @@ export default function Venta() {
     };
   }, [productos]);
 
-  // ✅ FILTRADO PARA BÚSQUEDA MANUAL
-  useEffect(() => {
-    if (codigoEscaneado.length === 0) {
-      setBusqueda(busquedaInput);
-    }
-  }, [busquedaInput, codigoEscaneado]);
-
   const cuentaSeleccionadaData = useMemo(() => {
     if (!cuentaSeleccionada?.id || !cuentas.length) return null;
     return cuentas.find(c => c.id === cuentaSeleccionada.id) || null;
   }, [cuentaSeleccionada?.id, cuentas]);
 
+  // ⭐ FILTRADO SEPARADO POR CÓDIGO Y NOMBRE
   const productosFiltrados = useMemo(() => {
-    if (!busqueda.trim() || codigoEscaneado.length > 0) return [];
+    if (codigoEscaneado.length > 0) return [];
     
-    return productos
-      .filter(p => {
-        const q = busqueda.toLowerCase().trim();
-        return (
-          p.descripcion?.toLowerCase().includes(q) ||
-          p.codigo?.toString().includes(q)
-        );
-      })
-      .slice(0, 5);
-  }, [busqueda, productos, codigoEscaneado]);
+    // ⭐ BÚSQUEDA POR CÓDIGO (solo con Enter, no filtrar en tiempo real)
+    if (busquedaCodigo && busquedaCodigo.trim()) {
+      return []; // No mostrar resultados mientras escribe el código
+    }
+    
+    // ⭐ BÚSQUEDA POR NOMBRE (en tiempo real)
+    if (busquedaNombre && busquedaNombre.trim()) {
+      const q = busquedaNombre.toLowerCase().trim();
+      return productos
+        .filter(p => p.descripcion?.toLowerCase().includes(q))
+        .slice(0, 5);
+    }
+    
+    return [];
+  }, [busquedaCodigo, busquedaNombre, productos, codigoEscaneado]);
 
   const total = useMemo(() => venta.reduce((sum, item) => sum + item.precio * item.cantidad, 0), [venta]);
   const cambio = useMemo(() => {
@@ -212,8 +209,8 @@ export default function Venta() {
     });
 
     // ✅ LIMPIAR Y RE-ENFOCAR
-    setBusquedaInput('');
-    setBusqueda('');
+    setBusquedaCodigo('');
+    setBusquedaNombre('');
     setCodigoEscaneado('');
     
     setTimeout(() => {
@@ -251,8 +248,8 @@ export default function Venta() {
     setModoPrestamo(false);
     setCuentaSeleccionada(null);
     setBusquedaCuenta('');
-    setBusquedaInput('');
-    setBusqueda('');
+    setBusquedaCodigo('');
+    setBusquedaNombre('');
     setCodigoEscaneado('');
     setPagoCliente('');
     
@@ -316,19 +313,21 @@ export default function Venta() {
 
   return (
     <div className="d-flex justify-content-center">
-      <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '1.5rem 0' }}>
-        <div className="card-header py-3 bg-primary text-white border-bottom-0">
-          <div className="row align-items-center">
+      <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '0.25rem 0' }}>
+        {/* ✅ HEADER ULTRA COMPACTO Y MÁS ARRIBA */}
+        <div className="card-header p-2 bg-primary text-white border-bottom-0" style={{ minHeight: '48px' }}>
+          <div className="row align-items-center g-0 h-100">
             <div className="col-md-8">
-              <h5 className="mb-1">🛒 Punto de Venta</h5>
-              <small className="opacity-75">
-                {venta.length} productos
-                {codigoEscaneado.length > 0 && ' | 🔢 ESCÁNER ACTIVO'}
-              </small>
+              <div className="d-flex align-items-center h-100">
+                <h6 className="mb-0 me-2" style={{ fontSize: '0.95rem', lineHeight: 1.1 }}>🛒 Punto de Venta</h6>
+                <small className="opacity-75" style={{ fontSize: '0.7rem' }}>
+                  {venta.length} prod{codigoEscaneado.length > 0 && ' | 🔢'}
+                </small>
+              </div>
             </div>
             <div className="col-md-4 text-end">
-              <div className="fs-2 fw-bold text-warning">{formatMoney(total)}</div>
-              <small className="opacity-75">{modoPrestamo ? 'Por cobrar' : 'Total'}</small>
+              <div className="fw-bold text-warning" style={{ fontSize: '1.4rem', lineHeight: 1.1 }}>{formatMoney(total)}</div>
+              <small className="opacity-75" style={{ fontSize: '0.65rem' }}>{modoPrestamo ? 'Por cobrar' : 'Total'}</small>
             </div>
           </div>
         </div>
@@ -337,14 +336,16 @@ export default function Venta() {
           <div className="row g-3">
             <div className="col-lg-8">
               <ProductoSearch
-                busquedaInput={busquedaInput}
-                setBusquedaInput={setBusquedaInput}
-                busqueda={busqueda}
+                busquedaCodigo={busquedaCodigo}
+                setBusquedaCodigo={setBusquedaCodigo}
+                busquedaNombre={busquedaNombre}
+                setBusquedaNombre={setBusquedaNombre}
                 productosFiltrados={productosFiltrados}
                 manejarSeleccionProducto={agregarAlCarrito}
                 formatMoney={formatMoney}
                 codigoEscaneado={codigoEscaneado}
-                inputRef={inputBusquedaRef} // ⭐ PASAR REF
+                inputRef={inputBusquedaRef}
+                productos={productos}
               />
               <VentaTabla
                 carrito={venta}

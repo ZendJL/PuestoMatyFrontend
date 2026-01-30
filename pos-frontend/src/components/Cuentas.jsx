@@ -5,6 +5,7 @@ import { formatMoney, formatFecha } from '../utils/format';
 import DataTable from './common/DataTable';
 import { imprimirRecibo } from './ReciboAbono';
 
+
 export default function Cuentas() {
   const [busqueda, setBusqueda] = useState('');
   const [cuentaExpandida, setCuentaExpandida] = useState(null);
@@ -19,6 +20,7 @@ export default function Cuentas() {
   
   const queryClient = useQueryClient();
 
+
   // ✅ MUTACIÓN NUEVA CUENTA
   const nuevaCuentaMutation = useMutation({
     mutationFn: (cliente) => axios.post('/api/cuentas', cliente),
@@ -32,6 +34,7 @@ export default function Cuentas() {
       alert('❌ Error al crear cliente: ' + (error.response?.data?.message || error.message));
     },
   });
+
 
   // ✅ MUTACIÓN EDITAR CUENTA
   const editarCuentaMutation = useMutation({
@@ -50,28 +53,43 @@ export default function Cuentas() {
     },
   });
 
-  // Resumen cuentas
+
+  // Resumen cuentas - ✅ PROTEGIDO
   const { data: cuentasResumen = [], isLoading, error } = useQuery({
     queryKey: ['cuentas-resumen'],
-    queryFn: async () => axios.get('/api/cuentas/resumen').then(res => res.data),
+    queryFn: async () => {
+      const response = await axios.get('/api/cuentas/resumen');
+      return Array.isArray(response.data) ? response.data : [];
+    },
   });
 
-  // Detalle cuenta expandida
+
+  // Detalle cuenta expandida - ✅ PROTEGIDO
   const { data: detalleCuenta, isLoading: loadingDetalle } = useQuery({
     queryKey: ['cuenta-detalle', cuentaExpandida?.id],
     enabled: !!cuentaExpandida?.id,
-    queryFn: async () => axios.get(`/api/cuentas/${cuentaExpandida.id}/detalles`).then(res => res.data),
+    queryFn: async () => {
+      const response = await axios.get(`/api/cuentas/${cuentaExpandida.id}/detalles`);
+      const data = response.data || {};
+      return {
+        ...data,
+        ultimosAbonos: Array.isArray(data.ultimosAbonos) ? data.ultimosAbonos : [],
+        ultimasVentas: Array.isArray(data.ultimasVentas) ? data.ultimasVentas : []
+      };
+    },
   });
 
-  // DETALLE DE VENTA (productos)
+
+  // DETALLE DE VENTA (productos) - ✅ PROTEGIDO
   const { data: detalleVenta, isLoading: loadingVenta } = useQuery({
     queryKey: ['venta-detalle', ventaSeleccionada?.ventaId],
     enabled: !!ventaSeleccionada?.ventaId,
     queryFn: async () => {
       const res = await axios.get(`/api/ventas/${ventaSeleccionada.ventaId}/productos`);
-      return res.data;
+      return Array.isArray(res.data) ? res.data : [];
     },
   });
+
 
   // ✅ MUTACIÓN ABONO CON IMPRESIÓN
   const abonoMutation = useMutation({
@@ -92,35 +110,45 @@ export default function Cuentas() {
     },
   });
 
+
+  // ✅ FILTRADO PROTEGIDO
   const datosFiltrados = useMemo(() => {
+    if (!Array.isArray(cuentasResumen)) return [];
+    
     let filtrados = cuentasResumen;
 
     if (soloDeudores) {
-      filtrados = filtrados.filter(c => (c.saldo || 0) > 0);
+      filtrados = filtrados.filter(c => (c?.saldo || 0) > 0);
     }
 
-    const texto = busqueda.toLowerCase();
+    const texto = busqueda.toLowerCase().trim();
     if (texto) {
       filtrados = filtrados.filter(c => 
-        c.nombre?.toLowerCase().includes(texto) || 
-        c.descripcion?.toLowerCase().includes(texto)
+        (c?.nombre || '').toLowerCase().includes(texto) || 
+        (c?.descripcion || '').toLowerCase().includes(texto)
       );
     }
 
     return filtrados;
   }, [cuentasResumen, busqueda, soloDeudores]);
 
-  // KPIs SIMPLIFICADOS
-  const totals = {
-    clientes: datosFiltrados.length,
-    saldoTotal: datosFiltrados.reduce((sum, c) => sum + (c.saldo || 0), 0),
-  };
+
+  // KPIs SIMPLIFICADOS - ✅ PROTEGIDO
+  const totals = useMemo(() => ({
+    clientes: datosFiltrados?.length || 0,
+    saldoTotal: Array.isArray(datosFiltrados) 
+      ? datosFiltrados.reduce((sum, c) => sum + (c?.saldo || 0), 0) 
+      : 0,
+  }), [datosFiltrados]);
+
 
   const handleAbono = () => {
     const monto = parseFloat(montoAbono);
     if (isNaN(monto) || monto <= 0) return alert('Monto inválido');
+    if (monto > (cuentaExpandida?.saldo || 0)) return alert('Monto supera el saldo');
     abonoMutation.mutate(monto);
   };
+
 
   // HANDLER NUEVA CUENTA
   const handleCrearCliente = () => {
@@ -135,8 +163,10 @@ export default function Cuentas() {
     });
   };
 
-  // ✅ HANDLER EDITAR CUENTA
+
+  // ✅ HANDLER EDITAR CUENTA - PROTEGIDO
   const handleEditarCliente = (cliente) => {
+    if (!cliente) return;
     setClienteEditando({
       nombre: cliente.nombre || '',
       descripcion: cliente.descripcion || ''
@@ -144,12 +174,15 @@ export default function Cuentas() {
     setEditandoCliente(cliente.id);
   };
 
+
   const handleGuardarEdicion = () => {
     if (!clienteEditando.nombre.trim()) {
       alert('El nombre es obligatorio');
       return;
     }
-    const cuentaOriginal = cuentasResumen.find(c => c.id === editandoCliente);
+    const cuentaOriginal = Array.isArray(cuentasResumen) 
+      ? cuentasResumen.find(c => c?.id === editandoCliente) 
+      : null;
     editarCuentaMutation.mutate({
       id: editandoCliente,
       cliente: {
@@ -160,27 +193,31 @@ export default function Cuentas() {
     });
   };
 
+
   const handleCancelarEdicion = () => {
     setEditandoCliente(null);
     setClienteEditando({ nombre: '', descripcion: '' });
   };
 
-  // Transformar productos del JSON
+
+  // ✅ Transformar productos del JSON - PROTEGIDO
   const productosTabla = useMemo(() => {
-    if (!detalleVenta || !Array.isArray(detalleVenta)) return [];
+    if (!Array.isArray(detalleVenta) || detalleVenta.length === 0) return [];
     return detalleVenta.map(item => ({
-      id: item.id,
-      nombre: item.producto?.descripcion || 'N/A',
-      codigo: item.producto?.codigo || '',
-      cantidad: item.cantidad || 0,
-      precioUnitario: item.precioUnitario || 0,
-      importe: item.importe || 0,
-      subtotal: item.costoTotal || (item.cantidad * item.precioUnitario) || 0
+      id: item?.id || 0,
+      nombre: item?.producto?.descripcion || 'N/A',
+      codigo: item?.producto?.codigo || '',
+      cantidad: item?.cantidad || 0,
+      precioUnitario: item?.precioUnitario || 0,
+      importe: item?.importe || 0,
+      subtotal: item?.costoTotal || ((item?.cantidad || 0) * (item?.precioUnitario || 0)) || 0
     }));
   }, [detalleVenta]);
 
+
   if (isLoading) return <div className="fs-6 text-center py-5">Cargando...</div>;
   if (error) return <div className="text-danger fs-6 text-center py-5">Error: {error.message}</div>;
+
 
   return (
     <div className="d-flex justify-content-center">
@@ -202,6 +239,7 @@ export default function Cuentas() {
             <i className="bi bi-plus-circle-fill me-1"/>Nuevo Cliente
           </button>
         </div>
+
 
         {/* ✅ FORMULARIO NUEVO CLIENTE */}
         {mostrarNuevoCliente && (
@@ -264,6 +302,7 @@ export default function Cuentas() {
           </div>
         )}
 
+
         <div className="card-body py-3">
           {/* KPIs */}
           <div className="row g-3 mb-4">
@@ -282,6 +321,7 @@ export default function Cuentas() {
               </div>
             </div>
           </div>
+
 
           {/* FILTROS */}
           <div className="border rounded p-3 mb-4 bg-body-tertiary">
@@ -333,161 +373,185 @@ export default function Cuentas() {
             )}
           </div>
 
-          {/* ✅ TABLA CON EDICIÓN INLINE Y BOTONES VERTICALES */}
-          <div className="card mb-4 shadow-sm">
-            <div className="card-header py-2 d-flex justify-content-between align-items-center">
-              <h6 className="mb-0">
-                <i className="bi bi-list-ul me-2"/>Resumen Cliente
-                <span className="badge bg-secondary ms-2">{datosFiltrados.length}</span>
-              </h6>
-            </div>
-            <div className="card-body p-0" style={{ maxHeight: '400px', overflow: 'auto' }}>
-              <DataTable
-                columns={[
-                  {
-                    id: 'nombre', 
-                    header: 'Cliente', 
-                    sortable: true, 
-                    filterable: true,
-                    render: (c) => (
-                      <div style={{ minHeight: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                        {editandoCliente === c.id ? (
-                          <div className="d-flex flex-column gap-1">
-                            <input
-                              type="text"
-                              className="form-control form-control-sm"
-                              style={{ height: '24px', fontSize: '0.8rem' }}
-                              placeholder="Nombre *"
-                              value={clienteEditando.nombre}
-                              onChange={(e) => setClienteEditando({...clienteEditando, nombre: e.target.value})}
-                              autoFocus
-                            />
-                            <input
-                              type="text"
-                              className="form-control form-control-sm"
-                              style={{ height: '22px', fontSize: '0.8rem' }}
-                              placeholder="Descripción"
-                              value={clienteEditando.descripcion}
-                              onChange={(e) => setClienteEditando({...clienteEditando, descripcion: e.target.value})}
-                            />
-                          </div>
-                        ) : (
-                          <>
-                            <div className="fw-semibold" style={{ fontSize: '0.9rem' }}>{c.nombre}</div>
-                            {c.descripcion && <small className="">{c.descripcion}</small>}
-                          </>
-                        )}
-                      </div>
-                    )
-                  },
-                  { id: 'totalVentas', header: 'Ventas', width: 80, align: 'center', sortable: true },
-                  {
-                    id: 'totalFacturado', 
-                    header: 'Vendido 💵', 
-                    width: 130, 
-                    align: 'right', 
-                    sortable: true,
-                    render: (c) => <div className="fw-semibold text-success">{formatMoney(c.totalFacturado)}</div>
-                  },
-                  {
-                    id: 'totalPagado', 
-                    header: 'Pagado 💳', 
-                    width: 130, 
-                    align: 'right', 
-                    sortable: true,
-                    render: (c) => <div className="fw-semibold text-primary">{formatMoney(c.totalPagado)}</div>
-                  },
-                  {
-                    id: 'saldo', 
-                    header: 'Saldo ⚖️', 
-                    width: 130, 
-                    align: 'right', 
-                    sortable: true,
-                    render: (c) => (
-                      <div className={`fw-bold fs-6 ${c.saldo > 0 ? 'text-danger' : 'text-success'}`}>
-                        {formatMoney(c.saldo)}
-                      </div>
-                    )
-                  },
-                  {
-                    id: 'acciones',
-                    header: 'Acciones',
-                    width: 110,
-                    align: 'center',
-                    render: (c) => (
-                      <div className="d-flex flex-column gap-1 h-100 justify-content-center p-1">
-                        {editandoCliente === c.id ? (
-                          <>
-                            <button
-                              className="btn btn-success btn-sm flex-fill py-1"
-                              style={{ minHeight: '28px', fontSize: '0.75rem' }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleGuardarEdicion();
-                              }}
-                              disabled={editarCuentaMutation.isPending || !clienteEditando.nombre.trim()}
-                              title="Guardar cambios"
-                            >
-                              {editarCuentaMutation.isPending ? (
-                                <span className="spinner-border spinner-border-sm me-1"/>
-                              ) : (
-                                <i className="bi bi-check-lg me-1"/>
-                              )}
-                              Guardar
-                            </button>
-                            <button
-                              className="btn btn-secondary btn-sm flex-fill py-1"
-                              style={{ minHeight: '28px', fontSize: '0.75rem' }}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleCancelarEdicion();
-                              }}
-                              title="Cancelar"
-                            >
-                              <i className="bi bi-x me-1"/>
-                              Cancelar
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            className="btn btn-outline-primary btn-sm w-100 py-1"
-                            style={{ minHeight: '32px', fontSize: '0.8rem' }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleEditarCliente(c);
-                            }}
-                            title="Editar cliente"
-                          >
-                            <i className="bi bi-pencil me-1"/>
-                            Editar
-                          </button>
-                        )}
-                      </div>
-                    )
-                  }
-                ]}
-                data={datosFiltrados}
-                initialSort={{ id: 'saldo', direction: 'desc' }}
-                pageSize={pageSize}
-                getRowKey={(c) => c.id}
-                onRowClick={(c) => {
-                  if (editandoCliente !== c.id) {
-                    setCuentaExpandida(cuentaExpandida?.id === c.id ? null : c);
-                  }
-                }}
-                selectedRowKey={cuentaExpandida?.id}
-              />
-            </div>
-          </div>
 
-          {/* Detalle Cuenta */}
+          {/* ✅ MENSAJE SI NO HAY DATOS */}
+          {(!Array.isArray(datosFiltrados) || datosFiltrados.length === 0) ? (
+            <div className="alert alert-info text-center py-5">
+              <i className="bi bi-inbox fs-1 d-block mb-3"/>
+              <h5>No hay clientes {soloDeudores ? 'con deuda' : 'registrados'}</h5>
+              <p className="mb-0">
+                {soloDeudores 
+                  ? 'Todos los clientes están al corriente en sus pagos' 
+                  : 'Comienza creando tu primer cliente con el botón "Nuevo Cliente"'}
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* ✅ TABLA CON EDICIÓN INLINE Y BOTONES VERTICALES */}
+              <div className="card mb-4 shadow-sm">
+                <div className="card-header py-2 d-flex justify-content-between align-items-center">
+                  <h6 className="mb-0">
+                    <i className="bi bi-list-ul me-2"/>Resumen Cliente
+                    <span className="badge bg-secondary ms-2">{datosFiltrados.length}</span>
+                  </h6>
+                </div>
+                <div className="card-body p-0" style={{ maxHeight: '400px', overflow: 'auto' }}>
+                  <DataTable
+                    columns={[
+                      {
+                        id: 'nombre', 
+                        header: 'Cliente', 
+                        sortable: true, 
+                        filterable: true,
+                        render: (c) => (
+                          <div style={{ minHeight: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                            {editandoCliente === c?.id ? (
+                              <div className="d-flex flex-column gap-1">
+                                <input
+                                  type="text"
+                                  className="form-control form-control-sm"
+                                  style={{ height: '24px', fontSize: '0.8rem' }}
+                                  placeholder="Nombre *"
+                                  value={clienteEditando.nombre}
+                                  onChange={(e) => setClienteEditando({...clienteEditando, nombre: e.target.value})}
+                                  autoFocus
+                                />
+                                <input
+                                  type="text"
+                                  className="form-control form-control-sm"
+                                  style={{ height: '22px', fontSize: '0.8rem' }}
+                                  placeholder="Descripción"
+                                  value={clienteEditando.descripcion}
+                                  onChange={(e) => setClienteEditando({...clienteEditando, descripcion: e.target.value})}
+                                />
+                              </div>
+                            ) : (
+                              <>
+                                <div className="fw-semibold" style={{ fontSize: '0.9rem' }}>{c?.nombre || 'Sin nombre'}</div>
+                                {c?.descripcion && <small className="">{c.descripcion}</small>}
+                              </>
+                            )}
+                          </div>
+                        )
+                      },
+                      { 
+                        id: 'totalVentas', 
+                        header: 'Ventas', 
+                        width: 80, 
+                        align: 'center', 
+                        sortable: true,
+                        render: (c) => c?.totalVentas || 0
+                      },
+                      {
+                        id: 'totalFacturado', 
+                        header: 'Vendido 💵', 
+                        width: 130, 
+                        align: 'right', 
+                        sortable: true,
+                        render: (c) => <div className="fw-semibold text-success">{formatMoney(c?.totalFacturado || 0)}</div>
+                      },
+                      {
+                        id: 'totalPagado', 
+                        header: 'Pagado 💳', 
+                        width: 130, 
+                        align: 'right', 
+                        sortable: true,
+                        render: (c) => <div className="fw-semibold text-primary">{formatMoney(c?.totalPagado || 0)}</div>
+                      },
+                      {
+                        id: 'saldo', 
+                        header: 'Saldo ⚖️', 
+                        width: 130, 
+                        align: 'right', 
+                        sortable: true,
+                        render: (c) => (
+                          <div className={`fw-bold fs-6 ${(c?.saldo || 0) > 0 ? 'text-danger' : 'text-success'}`}>
+                            {formatMoney(c?.saldo || 0)}
+                          </div>
+                        )
+                      },
+                      {
+                        id: 'acciones',
+                        header: 'Acciones',
+                        width: 110,
+                        align: 'center',
+                        render: (c) => (
+                          <div className="d-flex flex-column gap-1 h-100 justify-content-center p-1">
+                            {editandoCliente === c?.id ? (
+                              <>
+                                <button
+                                  className="btn btn-success btn-sm flex-fill py-1"
+                                  style={{ minHeight: '28px', fontSize: '0.75rem' }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleGuardarEdicion();
+                                  }}
+                                  disabled={editarCuentaMutation.isPending || !clienteEditando.nombre.trim()}
+                                  title="Guardar cambios"
+                                >
+                                  {editarCuentaMutation.isPending ? (
+                                    <span className="spinner-border spinner-border-sm me-1"/>
+                                  ) : (
+                                    <i className="bi bi-check-lg me-1"/>
+                                  )}
+                                  Guardar
+                                </button>
+                                <button
+                                  className="btn btn-secondary btn-sm flex-fill py-1"
+                                  style={{ minHeight: '28px', fontSize: '0.75rem' }}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCancelarEdicion();
+                                  }}
+                                  title="Cancelar"
+                                >
+                                  <i className="bi bi-x me-1"/>
+                                  Cancelar
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                className="btn btn-outline-primary btn-sm w-100 py-1"
+                                style={{ minHeight: '32px', fontSize: '0.8rem' }}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleEditarCliente(c);
+                                }}
+                                title="Editar cliente"
+                              >
+                                <i className="bi bi-pencil me-1"/>
+                                Editar
+                              </button>
+                            )}
+                          </div>
+                        )
+                      }
+                    ]}
+                    data={datosFiltrados}
+                    initialSort={{ id: 'saldo', direction: 'desc' }}
+                    pageSize={pageSize}
+                    getRowKey={(c) => c?.id || 0}
+                    onRowClick={(c) => {
+                      if (editandoCliente !== c?.id) {
+                        setCuentaExpandida(cuentaExpandida?.id === c?.id ? null : c);
+                      }
+                    }}
+                    selectedRowKey={cuentaExpandida?.id}
+                  />
+                </div>
+              </div>
+            </>
+          )}
+
+
+          {/* Detalle Cuenta - ✅ PROTEGIDO */}
           {cuentaExpandida && (
             <div className="card mt-4 shadow-sm">
               <div className="card-header d-flex justify-content-between align-items-center">
                 <h6>
-                  👤 {cuentaExpandida.nombre} 
-                  <span className={`badge ms-2 fs-6 fw-semibold ${cuentaExpandida.saldo > 0 ? 'bg-danger' : 'bg-success'}`}>
-                    {formatMoney(cuentaExpandida.saldo)}
+                  👤 {cuentaExpandida.nombre || 'Sin nombre'} 
+                  <span className={`badge ms-2 fs-6 fw-semibold ${(cuentaExpandida.saldo || 0) > 0 ? 'bg-danger' : 'bg-success'}`}>
+                    {formatMoney(cuentaExpandida.saldo || 0)}
                   </span>
                 </h6>
                 <button className="btn btn-sm btn-outline-secondary" onClick={() => setCuentaExpandida(null)}>
@@ -504,7 +568,7 @@ export default function Cuentas() {
                 ) : detalleCuenta ? (
                   <>
                     {/* Form Abono */}
-                    {cuentaExpandida.saldo > 0 && (
+                    {(cuentaExpandida.saldo || 0) > 0 && (
                       <div className="p-4 bg-warning bg-opacity-10 border-bottom">
                         <h6 className="mb-3">
                           <i className="bi bi-cash-coin text-warning me-2"/>Nuevo Abono
@@ -517,13 +581,13 @@ export default function Cuentas() {
                               placeholder="0.00" 
                               step="0.01" 
                               min="0.01" 
-                              max={cuentaExpandida.saldo}
+                              max={cuentaExpandida.saldo || 0}
                               value={montoAbono} 
                               onChange={(e) => setMontoAbono(e.target.value)}
                             />
                           </div>
                           <div className="col-md-4">
-                            <small className="text-muted">Máx: {formatMoney(cuentaExpandida.saldo)}</small>
+                            <small className="text-muted">Máx: {formatMoney(cuentaExpandida.saldo || 0)}</small>
                           </div>
                           <div className="col-md-3">
                             <button 
@@ -547,9 +611,10 @@ export default function Cuentas() {
                       </div>
                     )}
 
+
                     <div className="p-4">
-                      {/* ✅ ABONOS CON BOTÓN IMPRIMIR */}
-                      {detalleCuenta.ultimosAbonos?.length > 0 ? (
+                      {/* ✅ ABONOS CON BOTÓN IMPRIMIR - PROTEGIDO */}
+                      {Array.isArray(detalleCuenta?.ultimosAbonos) && detalleCuenta.ultimosAbonos.length > 0 ? (
                         <div className="mb-4">
                           <div className="d-flex justify-content-between align-items-center mb-3">
                             <h6>
@@ -570,11 +635,11 @@ export default function Cuentas() {
                               </thead>
                               <tbody>
                                 {detalleCuenta.ultimosAbonos.slice(0, pageSize).map(abono => (
-                                  <tr key={abono.id}>
-                                    <td className="fw-bold text-success">{formatMoney(abono.cantidad)}</td>
-                                    <td>{formatMoney(abono.viejoSaldo)}</td>
-                                    <td className="fw-bold text-primary">{formatMoney(abono.nuevoSaldo)}</td>
-                                    <td><small className="text-muted">{formatFecha(abono.fecha)}</small></td>
+                                  <tr key={abono?.id || Math.random()}>
+                                    <td className="fw-bold text-success">{formatMoney(abono?.cantidad || 0)}</td>
+                                    <td>{formatMoney(abono?.viejoSaldo || 0)}</td>
+                                    <td className="fw-bold text-primary">{formatMoney(abono?.nuevoSaldo || 0)}</td>
+                                    <td><small className="text-muted">{formatFecha(abono?.fecha)}</small></td>
                                     <td>
                                       <button
                                         className="btn btn-sm btn-outline-primary"
@@ -592,12 +657,13 @@ export default function Cuentas() {
                         </div>
                       ) : (
                         <div className="alert alert-info mb-4">
-                          <i className="bi bi-info-circle me-2"/>Sin abonos
+                          <i className="bi bi-info-circle me-2"/>Sin abonos registrados
                         </div>
                       )}
 
-                      {/* Ventas */}
-                      {detalleCuenta.ultimasVentas?.length > 0 ? (
+
+                      {/* Ventas - ✅ PROTEGIDO */}
+                      {Array.isArray(detalleCuenta?.ultimasVentas) && detalleCuenta.ultimasVentas.length > 0 ? (
                         <div>
                           <div className="d-flex justify-content-between align-items-center mb-3">
                             <h6>
@@ -618,23 +684,23 @@ export default function Cuentas() {
                               <tbody>
                                 {detalleCuenta.ultimasVentas.slice(0, pageSize).map(venta => (
                                   <tr 
-                                    key={venta.id} 
-                                    className={ventaSeleccionada?.id === venta.id ? 'table-active' : ''}
+                                    key={venta?.id || Math.random()} 
+                                    className={ventaSeleccionada?.id === venta?.id ? 'table-active' : ''}
                                     style={{cursor: 'pointer'}}
-                                    onClick={() => setVentaSeleccionada(ventaSeleccionada?.id === venta.id ? null : venta)}
+                                    onClick={() => setVentaSeleccionada(ventaSeleccionada?.id === venta?.id ? null : venta)}
                                   >
-                                    <td className="fw-semibold">#{venta.ventaId}</td>
-                                    <td className="text-end fw-bold text-success">{formatMoney(venta.totalVenta)}</td>
+                                    <td className="fw-semibold">#{venta?.ventaId || 'N/A'}</td>
+                                    <td className="text-end fw-bold text-success">{formatMoney(venta?.totalVenta || 0)}</td>
                                     <td>
                                       <span className={`badge fs-6 px-2 py-1 fw-semibold ${
-                                        venta.status === 'COMPLETADA' ? 'bg-success' : 
-                                        venta.status === 'PRESTAMO' ? 'bg-warning text-dark' : 
+                                        venta?.status === 'COMPLETADA' ? 'bg-success' : 
+                                        venta?.status === 'PRESTAMO' ? 'bg-warning text-dark' : 
                                         'bg-secondary'
                                       }`}>
-                                        {venta.status}
+                                        {venta?.status || 'N/A'}
                                       </span>
                                     </td>
-                                    <td><small className="text-muted">{formatFecha(venta.fecha)}</small></td>
+                                    <td><small className="text-muted">{formatFecha(venta?.fecha)}</small></td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -643,7 +709,7 @@ export default function Cuentas() {
                         </div>
                       ) : (
                         <div className="alert alert-info">
-                          <i className="bi bi-info-circle me-2"/>Sin ventas
+                          <i className="bi bi-info-circle me-2"/>Sin ventas registradas
                         </div>
                       )}
                     </div>
@@ -657,13 +723,14 @@ export default function Cuentas() {
             </div>
           )}
 
-          {/* DETALLE PRODUCTOS */}
+
+          {/* DETALLE PRODUCTOS - ✅ PROTEGIDO */}
           {ventaSeleccionada && (
             <div className="card mt-4 shadow-sm">
               <div className="card-header d-flex justify-content-between align-items-center">
                 <h6>
-                  📦 Productos #{ventaSeleccionada.ventaId} 
-                  <span className="badge bg-success ms-2 fs-6">{formatMoney(ventaSeleccionada.totalVenta)}</span>
+                  📦 Productos #{ventaSeleccionada.ventaId || 'N/A'} 
+                  <span className="badge bg-success ms-2 fs-6">{formatMoney(ventaSeleccionada.totalVenta || 0)}</span>
                 </h6>
                 <button 
                   className="btn btn-sm btn-outline-secondary" 
@@ -692,20 +759,20 @@ export default function Cuentas() {
                       </thead>
                       <tbody>
                         {productosTabla.slice(0, pageSize).map(producto => (
-                          <tr key={producto.id}>
-                            <td><small className="text-muted">{producto.codigo}</small></td>
-                            <td className="pe-2">{producto.nombre}</td>
-                            <td className="text-center fw-bold">{producto.cantidad}</td>
-                            <td className="text-end small">{formatMoney(producto.precioUnitario)}</td>
+                          <tr key={producto?.id || Math.random()}>
+                            <td><small className="text-muted">{producto?.codigo || ''}</small></td>
+                            <td className="pe-2">{producto?.nombre || 'N/A'}</td>
+                            <td className="text-center fw-bold">{producto?.cantidad || 0}</td>
+                            <td className="text-end small">{formatMoney(producto?.precioUnitario || 0)}</td>
                             <td className="text-end fw-bold text-success fs-6">
-                              {formatMoney(producto.subtotal)}
+                              {formatMoney(producto?.subtotal || 0)}
                             </td>
                           </tr>
                         ))}
                         <tr className="table-group-divider">
                           <td colSpan={4} className="text-end fw-bold fs-5 text-primary">TOTAL:</td>
                           <td className="text-end fs-4 fw-bold text-success">
-                            {formatMoney(ventaSeleccionada.totalVenta)}
+                            {formatMoney(ventaSeleccionada.totalVenta || 0)}
                           </td>
                         </tr>
                       </tbody>
@@ -713,18 +780,20 @@ export default function Cuentas() {
                   </div>
                 ) : (
                   <div className="p-4 text-center text-muted">
-                    No hay productos
+                    <i className="bi bi-inbox fs-2 d-block mb-2"/>
+                    No hay productos en esta venta
                   </div>
                 )}
               </div>
             </div>
           )}
 
+
           {/* Footer */}
           <div className="card-footer bg-body-tertiary py-3 text-center text-muted small">
             <div className="row">
               <div className="col-md-6">
-                Total sistema: {cuentasResumen?.length || 0}
+                Total sistema: {Array.isArray(cuentasResumen) ? cuentasResumen.length : 0}
               </div>
               <div className="col-md-6 text-md-end">
                 {new Date().toLocaleTimeString()}

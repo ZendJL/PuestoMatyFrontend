@@ -6,14 +6,6 @@ import ProductoSearchMerma from './ProductoSearchMerma';
 import MermaTabla from './MermaTabla';
 import ResumenMerma from './ResumenMerma';
 
-const TIPOS_MERMA = ['CADUCADO', 'USO_PERSONAL', 'MAL_ESTADO', 'ROBO', 'OTRO'];
-
-const labelTipo = (t) =>
-  t === 'CADUCADO' ? 'Caducado' :
-  t === 'USO_PERSONAL' ? 'Uso personal' :
-  t === 'MAL_ESTADO' ? 'Mal estado' :
-  t === 'ROBO' ? 'Robo' : 'Otro';
-
 export default function Merma() {
   const queryClient = useQueryClient();
   const [itemsMerma, setItemsMerma] = useState([]);
@@ -21,7 +13,6 @@ export default function Merma() {
   const [codigoEscaneado, setCodigoEscaneado] = useState('');
   const [tipoMerma, setTipoMerma] = useState('CADUCADO');
   const [descripcionMerma, setDescripcionMerma] = useState('');
-  const [ultimoCostoTotal, setUltimoCostoTotal] = useState(0);
   const [costoEstimado, setCostoEstimado] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [showReporte, setShowReporte] = useState(false);
@@ -51,55 +42,66 @@ export default function Merma() {
     return () => clearTimeout(timer);
   }, []);
 
-  // ✅ QUERY 1: Productos (cache 5min)
+  // ✅ QUERY 1: Productos (cache 5min) - PROTEGIDO
   const { data: productos = [], isLoading, error } = useQuery({
     queryKey: ['productos-merma'],
-    queryFn: () => axios.get('/api/productos').then(res => res.data),
+    queryFn: async () => {
+      const response = await axios.get('/api/productos');
+      return Array.isArray(response.data) ? response.data : [];
+    },
     staleTime: 5 * 60 * 1000,
   });
 
+  // ✅ TOTALES PROTEGIDOS
+  const totalItems = useMemo(() => 
+    Array.isArray(itemsMerma) 
+      ? itemsMerma.reduce((sum, i) => sum + (i?.cantidad || 0), 0) 
+      : 0
+  , [itemsMerma]);
+
   const agregarItemMerma = useCallback((producto) => {
+    if (!producto) return;
+    
     setItemsMerma(prev => {
-      const existe = prev.find(i => i.id === producto.id);
+      const prevSeguro = Array.isArray(prev) ? prev : [];
+      const existe = prevSeguro.find(i => i?.id === producto.id);
       const inventario = producto.cantidad ?? 0;
 
       if (inventario <= 0) {
-        alert(`❌ Sin inventario: ${producto.descripcion}`);
-        return prev;
+        alert(`❌ Sin inventario: ${producto.descripcion || 'Producto sin nombre'}`);
+        return prevSeguro;
       }
 
       if (existe) {
-        const nuevaCant = Math.min(existe.cantidad + 1, inventario);
-        return prev.map(i => i.id === producto.id ? { ...i, cantidad: nuevaCant } : i);
+        const nuevaCant = Math.min((existe.cantidad || 0) + 1, inventario);
+        return prevSeguro.map(i => i?.id === producto.id ? { ...i, cantidad: nuevaCant } : i);
       }
 
-      return [...prev, { ...producto, cantidad: 1, inventario }];
+      return [...prevSeguro, { 
+        ...producto, 
+        cantidad: 1, 
+        inventario: inventario 
+      }];
     });
     
-    // ✅ LIMPIAR Y RE-ENFOCAR
     setBusqueda('');
     setCodigoEscaneado('');
-    
-    setTimeout(() => {
-      inputBusquedaRef.current?.focus();
-    }, 50);
+    setTimeout(() => inputBusquedaRef.current?.focus(), 50);
   }, []);
 
-  // ⭐ LISTENER GLOBAL DE ESCANEO
+  // ⭐ LISTENER GLOBAL DE ESCANEO - PROTEGIDO
   useEffect(() => {
     const bufferEscaner = { current: '' };
     let timerEscaner = null;
     let escaneando = false;
 
     const handleEscaneo = (e) => {
-      // ⭐ SOLO ignorar inputs NUMÉRICOS y TEXTAREAS
       const elementoActivo = document.activeElement;
       const esInputNumerico = elementoActivo?.type === 'number';
       const esTextarea = elementoActivo?.tagName === 'TEXTAREA';
       
       if (esInputNumerico || esTextarea) {
         if (escaneando) {
-          console.log('🧹 LIMPIANDO - Input numérico/textarea activo');
           bufferEscaner.current = '';
           escaneando = false;
           setCodigoEscaneado('');
@@ -108,62 +110,47 @@ export default function Merma() {
         return;
       }
 
-      // ENTER - Procesar código
       if (e.key === 'Enter') {
         if (bufferEscaner.current.length > 0) {
           e.preventDefault();
           e.stopPropagation();
           
           const codigo = bufferEscaner.current.trim();
-          console.log('🔍 CÓDIGO COMPLETO:', codigo, '(longitud:', codigo.length, ')');
-          
-          const producto = productos.find(
-            p => p.codigo?.toString().trim() === codigo
-          );
+          const producto = Array.isArray(productos) 
+            ? productos.find(p => (p?.codigo || '').toString().trim() === codigo)
+            : null;
           
           if (producto) {
-            console.log('✅ ENCONTRADO:', producto.descripcion);
             agregarItemMerma(producto);
           } else {
-            console.log('❌ NO ENCONTRADO:', codigo);
             alert(`Código "${codigo}" no encontrado`);
           }
           
-          // ⭐ LIMPIEZA TOTAL
           bufferEscaner.current = '';
           escaneando = false;
           setCodigoEscaneado('');
           clearTimeout(timerEscaner);
           timerEscaner = null;
-          console.log('✅ BUFFER RESETEADO');
         }
         return;
       }
 
-      // SOLO NÚMEROS
-      if (!/^[0-9]$/.test(e.key)) {
-        return;
-      }
+      if (!/^[0-9]$/.test(e.key)) return;
 
-      // ⭐ CAPTURAR NÚMEROS
       e.preventDefault();
       e.stopPropagation();
 
       if (!escaneando) {
-        console.log('🔢 INICIO ESCANEO');
         escaneando = true;
         bufferEscaner.current = '';
         setCodigoEscaneado('');
       }
 
       bufferEscaner.current += e.key;
-      console.log('🔢 +', e.key, '→ BUFFER:', bufferEscaner.current);
       setCodigoEscaneado(bufferEscaner.current);
 
-      // ⭐ TIMEOUT MÁS LARGO (500ms en lugar de 300ms)
       clearTimeout(timerEscaner);
       timerEscaner = setTimeout(() => {
-        console.log('⏱️ TIMEOUT - Buffer incompleto:', bufferEscaner.current);
         bufferEscaner.current = '';
         escaneando = false;
         setCodigoEscaneado('');
@@ -171,29 +158,23 @@ export default function Merma() {
     };
 
     window.addEventListener('keydown', handleEscaneo, true);
-    console.log('✅ ESCÁNER MERMA ACTIVADO');
+    return () => window.removeEventListener('keydown', handleEscaneo, true);
+  }, [productos, agregarItemMerma]);
 
-    return () => {
-      window.removeEventListener('keydown', handleEscaneo, true);
-      if (timerEscaner) clearTimeout(timerEscaner);
-      console.log('❌ ESCÁNER MERMA DESACTIVADO');
-    };
-  }, [productos]);
-
-  // ✅ FILTRADO LOCAL
+  // ✅ FILTRADO LOCAL - PROTEGIDO
   const productosFiltrados = useMemo(() => {
-    if (!productos || !Array.isArray(productos) || codigoEscaneado.length > 0) return [];
+    if (!Array.isArray(productos) || codigoEscaneado.length > 0) return [];
     
     return productos
       .filter(p => 
-        p.descripcion?.toLowerCase().includes(busqueda.toLowerCase()) ||
-        p.codigo?.toLowerCase().includes(busqueda.toLowerCase())
+        (p?.descripcion || '').toLowerCase().includes(busqueda.toLowerCase()) ||
+        (p?.codigo || '').toLowerCase().includes(busqueda.toLowerCase())
       )
-      .filter(p => (p.cantidad || 0) > 0)
+      .filter(p => (p?.cantidad || 0) > 0)
       .slice(0, 10);
   }, [productos, busqueda, codigoEscaneado]);
 
-  // ✅ QUERY 2: Reporte histórico
+  // ✅ QUERY 2: Reporte histórico - PROTEGIDO
   const { data: reporteMermas = [], isFetching: loadingReporte } = useQuery({
     queryKey: ['reporte-mermas', fechaDesde, fechaHasta],
     queryFn: async () => {
@@ -202,36 +183,39 @@ export default function Merma() {
         hasta: `${fechaHasta}T23:59:59`,
       };
       const res = await axios.get('/api/mermas/reporte', { params });
-      return res.data;
+      return Array.isArray(res.data) ? res.data : [];
     },
     enabled: showReporte,
     staleTime: 10 * 60 * 1000,
   });
 
-  // 🔥 COSTO BATCH OPTIMIZADO
+  // 🔥 COSTO BATCH OPTIMIZADO - PROTEGIDO
   useEffect(() => {
-    if (costoTimeoutRef.current) {
-      clearTimeout(costoTimeoutRef.current);
-    }
+    if (costoTimeoutRef.current) clearTimeout(costoTimeoutRef.current);
 
-    if (itemsMerma.length === 0) {
+    if (!Array.isArray(itemsMerma) || itemsMerma.length === 0) {
       setCostoEstimado(0);
       return;
     }
 
     costoTimeoutRef.current = setTimeout(async () => {
-      console.log('🔥 BATCH COSTOS:', itemsMerma.length, 'productos');
-      
       try {
-        const requests = itemsMerma.map(item => ({
-          productoId: item.id,
-          cantidad: item.cantidad
-        }));
+        const requests = itemsMerma
+          .filter(item => item?.id)
+          .map(item => ({
+            productoId: item.id,
+            cantidad: item.cantidad || 0
+          }));
+
+        if (requests.length === 0) {
+          setCostoEstimado(0);
+          return;
+        }
 
         const res = await axios.post('/api/mermas/costos-batch', requests);
-        console.log('✅ BATCH RESPUESTA:', res.data);
-        
-        const total = res.data.reduce((sum, costo) => sum + (costo || 0), 0);
+        const total = Array.isArray(res.data)
+          ? res.data.reduce((sum, costo) => sum + (costo || 0), 0)
+          : 0;
         setCostoEstimado(total);
       } catch (err) {
         console.error('❌ BATCH ERROR:', err.response?.data || err.message);
@@ -240,78 +224,72 @@ export default function Merma() {
     }, 500);
 
     return () => {
-      if (costoTimeoutRef.current) {
-        clearTimeout(costoTimeoutRef.current);
-      }
+      if (costoTimeoutRef.current) clearTimeout(costoTimeoutRef.current);
     };
   }, [itemsMerma]);
 
-  const totalItems = itemsMerma.reduce((sum, i) => sum + (i.cantidad || 0), 0);
-
   const quitarItem = useCallback((id) => {
-    setItemsMerma(prev => prev.filter(i => i.id !== id));
-    
-    setTimeout(() => {
-      inputBusquedaRef.current?.focus();
-    }, 50);
+    if (!id) return;
+    setItemsMerma(prev => 
+      Array.isArray(prev) ? prev.filter(i => i?.id !== id) : []
+    );
+    setTimeout(() => inputBusquedaRef.current?.focus(), 50);
   }, []);
 
   const cambiarCantidadItem = useCallback((id, nuevaCantidad) => {
-    if (Number.isNaN(nuevaCantidad) || nuevaCantidad < 1) return;
+    if (!id || Number.isNaN(nuevaCantidad) || nuevaCantidad < 1) return;
     setItemsMerma(prev =>
-      prev.map(i => {
-        if (i.id !== id) return i;
-        const cantidadSegura = Math.min(nuevaCantidad, i.inventario ?? 0);
-        return { ...i, cantidad: cantidadSegura };
-      })
+      Array.isArray(prev)
+        ? prev.map(i => {
+            if (i?.id !== id) return i;
+            const cantidadSegura = Math.min(nuevaCantidad, i?.inventario ?? 0);
+            return { ...i, cantidad: cantidadSegura };
+          })
+        : []
     );
   }, []);
 
   const guardarMerma = async () => {
-    if (itemsMerma.length === 0) return alert('❌ Carrito vacío');
+    if (!Array.isArray(itemsMerma) || itemsMerma.length === 0) {
+      return alert('❌ Carrito vacío');
+    }
 
-    const conExceso = itemsMerma.find(i => (i.cantidad || 0) > (i.inventario ?? 0));
-    if (conExceso) return alert(`❌ Excede inventario: ${conExceso.descripcion}`);
+    const conExceso = itemsMerma.find(i => (i?.cantidad || 0) > (i?.inventario ?? 0));
+    if (conExceso) {
+      return alert(`❌ Excede inventario: ${conExceso.descripcion || 'Producto sin nombre'}`);
+    }
 
     try {
       const mermaData = {
         tipoMerma,
-        motivoGeneral: descripcionMerma || null,
-        mermaProductos: itemsMerma.map(item => ({
-          producto: { id: item.id },
-          cantidad: item.cantidad
-        }))
+        motivoGeneral: descripcionMerma?.trim() || null,
+        mermaProductos: itemsMerma
+          .filter(item => item?.id)
+          .map(item => ({
+            producto: { id: item.id },
+            cantidad: item.cantidad || 0
+          }))
       };
-
-      console.log('🔥 GUARDAR MERMA:', JSON.stringify(mermaData, null, 2));
 
       const res = await axios.post('/api/mermas', mermaData);
       const costoTotalReal = res.data?.costoTotal ?? 0;
-      setUltimoCostoTotal(costoTotalReal);
 
       alert(`✅ Merma guardada\n💰 Costo: ${formatMoney(costoTotalReal)}`);
       
-      // ✅ LIMPIAR TODO Y RE-ENFOCAR
       setItemsMerma([]);
       setDescripcionMerma('');
       setBusqueda('');
       setCostoEstimado(0);
       setCodigoEscaneado('');
-      
       queryClient.invalidateQueries(['productos-merma']);
       
-      setTimeout(() => {
-        inputBusquedaRef.current?.focus();
-      }, 50);
+      setTimeout(() => inputBusquedaRef.current?.focus(), 50);
     } catch (err) {
-      console.error('❌ ERROR GUARDAR:', err.response?.data);
-      alert(`❌ ${err.response?.data || 'Error al guardar merma'}`);
+      alert(`❌ ${err.response?.data?.message || err.response?.data || 'Error al guardar merma'}`);
     }
   };
 
-  const toggleReporte = () => {
-    setShowReporte(!showReporte);
-  };
+  const toggleReporte = () => setShowReporte(!showReporte);
 
   if (isLoading) return <div className="fs-6 text-center py-5">Cargando productos...</div>;
   if (error) return <div className="text-danger fs-6 text-center py-5">Error: {error.message}</div>;
@@ -319,7 +297,6 @@ export default function Merma() {
   return (
     <div className="d-flex justify-content-center">
       <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '0.25rem 0' }}>
-        {/* ✅ HEADER ULTRA COMPACTO Y MÁS ARRIBA */}
         <div className="card-header p-2 bg-primary text-white border-bottom-0" style={{ minHeight: '48px' }}>
           <div className="row align-items-center g-0 h-100">
             <div className="col-md-8">
@@ -331,7 +308,9 @@ export default function Merma() {
               </div>
             </div>
             <div className="col-md-4 text-end">
-              <div className="fw-bold text-warning" style={{ fontSize: '1.4rem', lineHeight: 1.1 }}>{formatMoney(costoEstimado)}</div>
+              <div className="fw-bold text-warning" style={{ fontSize: '1.4rem', lineHeight: 1.1 }}>
+                {formatMoney(costoEstimado)}
+              </div>
               <small className="opacity-75" style={{ fontSize: '0.65rem' }}>{totalItems} items</small>
             </div>
           </div>
@@ -369,7 +348,7 @@ export default function Merma() {
                 totalItems={totalItems}
                 costoEstimado={costoEstimado}
                 tipoMerma={tipoMerma}
-                labelTipo={labelTipo}
+                labelTipo={(t) => t === 'CADUCADO' ? 'Caducado' : t === 'USO_PERSONAL' ? 'Uso personal' : t === 'MAL_ESTADO' ? 'Mal estado' : t === 'ROBO' ? 'Robo' : 'Otro'}
                 formatMoney={formatMoney}
               />
               
@@ -406,17 +385,24 @@ export default function Merma() {
                   </div>
                   <div className="card-body p-2" style={{ maxHeight: '300px', overflowY: 'auto' }}>
                     {loadingReporte ? (
-                      <div className="text-center py-3">Cargando...</div>
-                    ) : reporteMermas.length === 0 ? (
-                      <div className="text-muted text-center py-3">Sin mermas</div>
+                      <div className="text-center py-3">
+                        <div className="spinner-border spinner-border-sm me-2" role="status"/>
+                        Cargando...
+                      </div>
+                    ) : !Array.isArray(reporteMermas) || reporteMermas.length === 0 ? (
+                      <div className="text-muted text-center py-5">
+                        <i className="bi bi-inbox fs-2 d-block mb-3 opacity-50"/>
+                        <div>Sin mermas en este rango</div>
+                      </div>
                     ) : (
                       <div>
                         {reporteMermas.slice(0, 5).map((merma) => (
-                          <div key={merma.id} className="border-bottom py-2 small">
-                            <div className="fw-bold">{labelTipo(merma.tipoMerma)}</div>
-                            <div>{formatMoney(merma.costoTotal || 0)}</div>
+                          <div key={merma?.id || Math.random()} className="border-bottom py-2 small">
+                            <div className="fw-bold">{merma?.tipoMerma || 'N/A'}</div>
+                            <div>{formatMoney(merma?.costoTotal || 0)}</div>
                             <div className="text-muted">
-                              {merma.detalles?.length || 0} productos • {new Date(merma.fecha).toLocaleDateString()}
+                              {(merma?.detalles?.length || 0)} productos • 
+                              {merma?.fecha ? new Date(merma.fecha).toLocaleDateString() : 'Sin fecha'}
                             </div>
                           </div>
                         ))}
@@ -442,9 +428,7 @@ export default function Merma() {
                   setDescripcionMerma('');
                   setBusqueda('');
                   setCodigoEscaneado('');
-                  setTimeout(() => {
-                    inputBusquedaRef.current?.focus();
-                  }, 50);
+                  setTimeout(() => inputBusquedaRef.current?.focus(), 50);
                 }}
               >
                 <i className="bi bi-arrow-repeat me-2"/>Limpiar
@@ -453,10 +437,10 @@ export default function Merma() {
             <div className="col-md-6">
               <button 
                 className={`btn w-100 h-100 fs-5 fw-bold text-white shadow-sm ${
-                  itemsMerma.length === 0 ? 'btn-secondary' : 'btn-danger'
+                  totalItems === 0 ? 'btn-secondary' : 'btn-danger'
                 }`}
                 onClick={guardarMerma}
-                disabled={itemsMerma.length === 0}
+                disabled={totalItems === 0}
               >
                 <i className="bi bi-check-circle-fill me-2 fs-4"/>
                 Guardar Merma

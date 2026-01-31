@@ -60,7 +60,7 @@ export default function ReporteMermas() {
   const { data: mermasData, isLoading, error } = useQuery({
     queryKey: ['reporte-mermas'],
     queryFn: async () => {
-      const res = await axios.get('http://localhost:8080/api/mermas');
+      const res = await axios.get('/api/mermas');
       return res.data;
     },
   });

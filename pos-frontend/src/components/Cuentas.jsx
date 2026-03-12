@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatMoney, formatFecha } from '../utils/format';
 import DataTable from './common/DataTable';
 import { imprimirRecibo } from './ReciboAbono';
+import { useTasaCambio } from '../context/TasaCambioContext';
 
 
 export default function Cuentas() {
@@ -17,8 +18,14 @@ export default function Cuentas() {
   const [editandoCliente, setEditandoCliente] = useState(null);
   const [nuevoCliente, setNuevoCliente] = useState({ nombre: '', descripcion: '' });
   const [clienteEditando, setClienteEditando] = useState({ nombre: '', descripcion: '' });
-  
+  const { tasaCambio } = useTasaCambio();
+  // Estados para modo de pago del abono
+  const [modoPagoAbono, setModoPagoAbono] = useState('PESOS');
+  const [abonoEnDolares, setAbonoEnDolares] = useState('');
+
+
   const queryClient = useQueryClient();
+
 
 
   // ✅ MUTACIÓN NUEVA CUENTA
@@ -99,7 +106,7 @@ export default function Cuentas() {
       queryClient.invalidateQueries({ queryKey: ['cuentas-resumen'] });
       queryClient.invalidateQueries({ queryKey: ['cuenta-detalle', cuentaExpandida?.id] });
       setMontoAbono('');
-      
+
       // ✅ PREGUNTAR SI IMPRIMIR
       if (window.confirm('✅ Abono registrado correctamente.\n\n¿Desea imprimir el recibo?')) {
         imprimirRecibo(abonoCreado, cuentaExpandida);
@@ -114,7 +121,7 @@ export default function Cuentas() {
   // ✅ FILTRADO PROTEGIDO
   const datosFiltrados = useMemo(() => {
     if (!Array.isArray(cuentasResumen)) return [];
-    
+
     let filtrados = cuentasResumen;
 
     if (soloDeudores) {
@@ -123,8 +130,8 @@ export default function Cuentas() {
 
     const texto = busqueda.toLowerCase().trim();
     if (texto) {
-      filtrados = filtrados.filter(c => 
-        (c?.nombre || '').toLowerCase().includes(texto) || 
+      filtrados = filtrados.filter(c =>
+        (c?.nombre || '').toLowerCase().includes(texto) ||
         (c?.descripcion || '').toLowerCase().includes(texto)
       );
     }
@@ -136,8 +143,8 @@ export default function Cuentas() {
   // KPIs SIMPLIFICADOS - ✅ PROTEGIDO
   const totals = useMemo(() => ({
     clientes: datosFiltrados?.length || 0,
-    saldoTotal: Array.isArray(datosFiltrados) 
-      ? datosFiltrados.reduce((sum, c) => sum + (c?.saldo || 0), 0) 
+    saldoTotal: Array.isArray(datosFiltrados)
+      ? datosFiltrados.reduce((sum, c) => sum + (c?.saldo || 0), 0)
       : 0,
   }), [datosFiltrados]);
 
@@ -180,8 +187,8 @@ export default function Cuentas() {
       alert('El nombre es obligatorio');
       return;
     }
-    const cuentaOriginal = Array.isArray(cuentasResumen) 
-      ? cuentasResumen.find(c => c?.id === editandoCliente) 
+    const cuentaOriginal = Array.isArray(cuentasResumen)
+      ? cuentasResumen.find(c => c?.id === editandoCliente)
       : null;
     editarCuentaMutation.mutate({
       id: editandoCliente,
@@ -231,12 +238,12 @@ export default function Cuentas() {
               {soloDeudores && <span className="badge bg-danger ms-1" style={{ fontSize: '0.6rem' }}>Deudores</span>}
             </small>
           </div>
-          <button 
+          <button
             className="btn btn-success btn-sm fw-bold px-2 py-1"
             style={{ fontSize: '0.75rem' }}
             onClick={() => setMostrarNuevoCliente(true)}
           >
-            <i className="bi bi-plus-circle-fill me-1"/>Nuevo Cliente
+            <i className="bi bi-plus-circle-fill me-1" />Nuevo Cliente
           </button>
         </div>
 
@@ -252,7 +259,7 @@ export default function Cuentas() {
                   className="form-control form-control-lg"
                   placeholder="Juan Pérez"
                   value={nuevoCliente.nombre}
-                  onChange={(e) => setNuevoCliente({...nuevoCliente, nombre: e.target.value})}
+                  onChange={(e) => setNuevoCliente({ ...nuevoCliente, nombre: e.target.value })}
                   autoFocus
                 />
               </div>
@@ -263,41 +270,41 @@ export default function Cuentas() {
                   className="form-control form-control-lg"
                   placeholder="Teléfono, notas..."
                   value={nuevoCliente.descripcion}
-                  onChange={(e) => setNuevoCliente({...nuevoCliente, descripcion: e.target.value})}
+                  onChange={(e) => setNuevoCliente({ ...nuevoCliente, descripcion: e.target.value })}
                 />
               </div>
               <div className="col-lg-3 col-md-3">
                 <div className="d-grid gap-2 h-100">
-                  <button 
+                  <button
                     className="btn btn-success h-100 fw-bold shadow-sm"
                     onClick={handleCrearCliente}
                     disabled={nuevaCuentaMutation.isPending || !nuevoCliente.nombre.trim()}
                   >
                     {nuevaCuentaMutation.isPending ? (
                       <>
-                        <span className="spinner-border spinner-border-sm me-2"/>
+                        <span className="spinner-border spinner-border-sm me-2" />
                         Creando...
                       </>
                     ) : (
                       <>
-                        <i className="bi bi-check-circle-fill me-1"/>Crear
+                        <i className="bi bi-check-circle-fill me-1" />Crear
                       </>
                     )}
                   </button>
-                  <button 
+                  <button
                     className="btn btn-outline-secondary btn-sm"
                     onClick={() => {
                       setMostrarNuevoCliente(false);
                       setNuevoCliente({ nombre: '', descripcion: '' });
                     }}
                   >
-                    <i className="bi bi-x"/>Cancelar
+                    <i className="bi bi-x" />Cancelar
                   </button>
                 </div>
               </div>
             </div>
             <div className="mt-2 small text-success">
-              <i className="bi bi-info-circle me-1"/>Saldo inicial: $0.00
+              <i className="bi bi-info-circle me-1" />Saldo inicial: $0.00
             </div>
           </div>
         )}
@@ -329,7 +336,7 @@ export default function Cuentas() {
               <div className="col-md-5">
                 <label className="form-label mb-1 small fw-semibold">🔍 Buscar</label>
                 <input
-                  type="text" 
+                  type="text"
                   className="form-control form-control-lg"
                   placeholder="Nombre o descripción..."
                   value={busqueda}
@@ -338,9 +345,9 @@ export default function Cuentas() {
               </div>
               <div className="col-md-4">
                 <label className="form-label mb-1 small fw-semibold">Filas</label>
-                <select 
-                  className="form-select" 
-                  value={pageSize} 
+                <select
+                  className="form-select"
+                  value={pageSize}
                   onChange={(e) => setPageSize(parseInt(e.target.value))}
                 >
                   <option value={10}>10</option>
@@ -356,11 +363,11 @@ export default function Cuentas() {
                 >
                   {soloDeudores ? (
                     <>
-                      <i className="bi bi-people-fill me-1"/>Todos
+                      <i className="bi bi-people-fill me-1" />Todos
                     </>
                   ) : (
                     <>
-                      <i className="bi bi-exclamation-triangle-fill me-1"/>Deudores
+                      <i className="bi bi-exclamation-triangle-fill me-1" />Deudores
                     </>
                   )}
                 </button>
@@ -368,7 +375,7 @@ export default function Cuentas() {
             </div>
             {soloDeudores && (
               <div className="mt-2 p-2 bg-danger-subtle border rounded small">
-                <i className="bi bi-info-circle me-1"/> {totals.clientes} deudor{totals.clientes !== 1 ? 'es' : ''}
+                <i className="bi bi-info-circle me-1" /> {totals.clientes} deudor{totals.clientes !== 1 ? 'es' : ''}
               </div>
             )}
           </div>
@@ -377,11 +384,11 @@ export default function Cuentas() {
           {/* ✅ MENSAJE SI NO HAY DATOS */}
           {(!Array.isArray(datosFiltrados) || datosFiltrados.length === 0) ? (
             <div className="alert alert-info text-center py-5">
-              <i className="bi bi-inbox fs-1 d-block mb-3"/>
+              <i className="bi bi-inbox fs-1 d-block mb-3" />
               <h5>No hay clientes {soloDeudores ? 'con deuda' : 'registrados'}</h5>
               <p className="mb-0">
-                {soloDeudores 
-                  ? 'Todos los clientes están al corriente en sus pagos' 
+                {soloDeudores
+                  ? 'Todos los clientes están al corriente en sus pagos'
                   : 'Comienza creando tu primer cliente con el botón "Nuevo Cliente"'}
               </p>
             </div>
@@ -391,7 +398,7 @@ export default function Cuentas() {
               <div className="card mb-4 shadow-sm">
                 <div className="card-header py-2 d-flex justify-content-between align-items-center">
                   <h6 className="mb-0">
-                    <i className="bi bi-list-ul me-2"/>Resumen Cliente
+                    <i className="bi bi-list-ul me-2" />Resumen Cliente
                     <span className="badge bg-secondary ms-2">{datosFiltrados.length}</span>
                   </h6>
                 </div>
@@ -399,9 +406,9 @@ export default function Cuentas() {
                   <DataTable
                     columns={[
                       {
-                        id: 'nombre', 
-                        header: 'Cliente', 
-                        sortable: true, 
+                        id: 'nombre',
+                        header: 'Cliente',
+                        sortable: true,
                         filterable: true,
                         render: (c) => (
                           <div style={{ minHeight: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
@@ -413,7 +420,7 @@ export default function Cuentas() {
                                   style={{ height: '24px', fontSize: '0.8rem' }}
                                   placeholder="Nombre *"
                                   value={clienteEditando.nombre}
-                                  onChange={(e) => setClienteEditando({...clienteEditando, nombre: e.target.value})}
+                                  onChange={(e) => setClienteEditando({ ...clienteEditando, nombre: e.target.value })}
                                   autoFocus
                                 />
                                 <input
@@ -422,7 +429,7 @@ export default function Cuentas() {
                                   style={{ height: '22px', fontSize: '0.8rem' }}
                                   placeholder="Descripción"
                                   value={clienteEditando.descripcion}
-                                  onChange={(e) => setClienteEditando({...clienteEditando, descripcion: e.target.value})}
+                                  onChange={(e) => setClienteEditando({ ...clienteEditando, descripcion: e.target.value })}
                                 />
                               </div>
                             ) : (
@@ -434,35 +441,35 @@ export default function Cuentas() {
                           </div>
                         )
                       },
-                      { 
-                        id: 'totalVentas', 
-                        header: 'Ventas', 
-                        width: 80, 
-                        align: 'center', 
+                      {
+                        id: 'totalVentas',
+                        header: 'Ventas',
+                        width: 80,
+                        align: 'center',
                         sortable: true,
                         render: (c) => c?.totalVentas || 0
                       },
                       {
-                        id: 'totalFacturado', 
-                        header: 'Vendido 💵', 
-                        width: 130, 
-                        align: 'right', 
+                        id: 'totalFacturado',
+                        header: 'Vendido 💵',
+                        width: 130,
+                        align: 'right',
                         sortable: true,
                         render: (c) => <div className="fw-semibold text-success">{formatMoney(c?.totalFacturado || 0)}</div>
                       },
                       {
-                        id: 'totalPagado', 
-                        header: 'Pagado 💳', 
-                        width: 130, 
-                        align: 'right', 
+                        id: 'totalPagado',
+                        header: 'Pagado 💳',
+                        width: 130,
+                        align: 'right',
                         sortable: true,
                         render: (c) => <div className="fw-semibold text-primary">{formatMoney(c?.totalPagado || 0)}</div>
                       },
                       {
-                        id: 'saldo', 
-                        header: 'Saldo ⚖️', 
-                        width: 130, 
-                        align: 'right', 
+                        id: 'saldo',
+                        header: 'Saldo ⚖️',
+                        width: 130,
+                        align: 'right',
                         sortable: true,
                         render: (c) => (
                           <div className={`fw-bold fs-6 ${(c?.saldo || 0) > 0 ? 'text-danger' : 'text-success'}`}>
@@ -490,9 +497,9 @@ export default function Cuentas() {
                                   title="Guardar cambios"
                                 >
                                   {editarCuentaMutation.isPending ? (
-                                    <span className="spinner-border spinner-border-sm me-1"/>
+                                    <span className="spinner-border spinner-border-sm me-1" />
                                   ) : (
-                                    <i className="bi bi-check-lg me-1"/>
+                                    <i className="bi bi-check-lg me-1" />
                                   )}
                                   Guardar
                                 </button>
@@ -505,7 +512,7 @@ export default function Cuentas() {
                                   }}
                                   title="Cancelar"
                                 >
-                                  <i className="bi bi-x me-1"/>
+                                  <i className="bi bi-x me-1" />
                                   Cancelar
                                 </button>
                               </>
@@ -519,7 +526,7 @@ export default function Cuentas() {
                                 }}
                                 title="Editar cliente"
                               >
-                                <i className="bi bi-pencil me-1"/>
+                                <i className="bi bi-pencil me-1" />
                                 Editar
                               </button>
                             )}
@@ -549,20 +556,20 @@ export default function Cuentas() {
             <div className="card mt-4 shadow-sm">
               <div className="card-header d-flex justify-content-between align-items-center">
                 <h6>
-                  👤 {cuentaExpandida.nombre || 'Sin nombre'} 
+                  👤 {cuentaExpandida.nombre || 'Sin nombre'}
                   <span className={`badge ms-2 fs-6 fw-semibold ${(cuentaExpandida.saldo || 0) > 0 ? 'bg-danger' : 'bg-success'}`}>
                     {formatMoney(cuentaExpandida.saldo || 0)}
                   </span>
                 </h6>
                 <button className="btn btn-sm btn-outline-secondary" onClick={() => setCuentaExpandida(null)}>
-                  <i className="bi bi-x-circle"/>Cerrar
+                  <i className="bi bi-x-circle" />Cerrar
                 </button>
               </div>
-              
+
               <div className="card-body p-0">
                 {loadingDetalle ? (
                   <div className="p-4 text-center">
-                    <div className="spinner-border spinner-border-sm me-2" role="status"/>
+                    <div className="spinner-border spinner-border-sm me-2" role="status" />
                     <span>Cargando detalles...</span>
                   </div>
                 ) : detalleCuenta ? (
@@ -571,39 +578,84 @@ export default function Cuentas() {
                     {(cuentaExpandida.saldo || 0) > 0 && (
                       <div className="p-4 bg-warning bg-opacity-10 border-bottom">
                         <h6 className="mb-3">
-                          <i className="bi bi-cash-coin text-warning me-2"/>Nuevo Abono
+                          <i className="bi bi-cash-coin text-warning me-2" />Nuevo Abono
                         </h6>
+
+                        {/* Selector modo pago abono */}
+                        <div className="mb-3">
+                          <div className="btn-group w-100" role="group">
+                            {[
+                              { key: 'PESOS', label: '🇲🇽 Pesos', color: 'primary' },
+                              { key: 'DOLARES', label: '🇺🇸 Dólares', color: 'success' },
+                            ].map(({ key, label, color }) => (
+                              <button key={key} type="button"
+                                className={`btn btn-sm ${modoPagoAbono === key ? `btn-${color} text-white` : `btn-outline-${color}`}`}
+                                onClick={() => { setModoPagoAbono(key); setMontoAbono(''); setAbonoEnDolares(''); }}>
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          <small className="text-muted" style={{ fontSize: '0.7rem' }}>
+                            Tasa actual: $1 USD = ${tasaCambio} MXN
+                          </small>
+                        </div>
+
                         <div className="row g-3">
                           <div className="col-md-5">
-                            <input
-                              type="number" 
-                              className="form-control form-control-lg"
-                              placeholder="0.00" 
-                              step="0.01" 
-                              min="0.01" 
-                              max={cuentaExpandida.saldo || 0}
-                              value={montoAbono} 
-                              onChange={(e) => setMontoAbono(e.target.value)}
-                            />
+                            {modoPagoAbono === 'PESOS' ? (
+                              <input
+                                type="number"
+                                className="form-control form-control-lg"
+                                placeholder="0.00"
+                                step="0.01" min="0.01"
+                                max={cuentaExpandida.saldo || 0}
+                                value={montoAbono}
+                                onChange={(e) => setMontoAbono(e.target.value)}
+                              />
+                            ) : (
+                              <>
+                                <div className="input-group">
+                                  <span className="input-group-text bg-success text-white">USD</span>
+                                  <input
+                                    type="number"
+                                    className="form-control form-control-lg"
+                                    placeholder="0.00"
+                                    step="0.01" min="0.01"
+                                    value={abonoEnDolares}
+                                    onChange={(e) => {
+                                      setAbonoEnDolares(e.target.value);
+                                      setMontoAbono(String((Number(e.target.value) * tasaCambio).toFixed(2)));
+                                    }}
+                                  />
+                                </div>
+                                {abonoEnDolares > 0 && (
+                                  <small className="text-muted d-block mt-1">
+                                    = {formatMoney(Number(abonoEnDolares) * tasaCambio)} MXN
+                                  </small>
+                                )}
+                              </>
+                            )}
                           </div>
                           <div className="col-md-4">
-                            <small className="text-muted">Máx: {formatMoney(cuentaExpandida.saldo || 0)}</small>
+                            <small className="text-muted">
+                              Máx: {formatMoney(cuentaExpandida.saldo || 0)}
+                              {montoAbono && modoPagoAbono === 'DOLARES' && (
+                                <span className="d-block text-success fw-bold">
+                                  Abono: {formatMoney(Number(montoAbono))} MXN
+                                </span>
+                              )}
+                            </small>
                           </div>
                           <div className="col-md-3">
-                            <button 
-                              className="btn btn-warning w-100 h-100 py-3 fw-bold" 
-                              onClick={handleAbono} 
+                            <button
+                              className="btn btn-warning w-100 h-100 py-3 fw-bold"
+                              onClick={handleAbono}
                               disabled={!montoAbono || abonoMutation.isPending}
                             >
                               {abonoMutation.isPending ? (
-                                <>
-                                  <span className="spinner-border spinner-border-sm me-2"/>
-                                  Registrando...
-                                </>
+                                <><span className="spinner-border spinner-border-sm me-2" />Registrando...</>
                               ) : (
-                                <>
-                                  <i className="bi bi-check-circle-fill me-2"/>Abono
-                                </>
+                                <><i className="bi bi-check-circle-fill me-2" />Abono</>
                               )}
                             </button>
                           </div>
@@ -612,17 +664,18 @@ export default function Cuentas() {
                     )}
 
 
+
                     <div className="p-4">
                       {/* ✅ ABONOS CON BOTÓN IMPRIMIR - PROTEGIDO */}
                       {Array.isArray(detalleCuenta?.ultimosAbonos) && detalleCuenta.ultimosAbonos.length > 0 ? (
                         <div className="mb-4">
                           <div className="d-flex justify-content-between align-items-center mb-3">
                             <h6>
-                              <i className="bi bi-receipt me-2"/>Abonos 
+                              <i className="bi bi-receipt me-2" />Abonos
                               <span className="badge bg-info ms-2">{detalleCuenta.ultimosAbonos.length}</span>
                             </h6>
                           </div>
-                          <div className="table-responsive" style={{maxHeight: '250px', overflow: 'auto'}}>
+                          <div className="table-responsive" style={{ maxHeight: '250px', overflow: 'auto' }}>
                             <table className="table table-sm table-hover">
                               <thead className="table-light">
                                 <tr>
@@ -646,7 +699,7 @@ export default function Cuentas() {
                                         onClick={() => imprimirRecibo(abono, cuentaExpandida)}
                                         title="Reimprimir recibo"
                                       >
-                                        <i className="bi bi-printer-fill"/>
+                                        <i className="bi bi-printer-fill" />
                                       </button>
                                     </td>
                                   </tr>
@@ -657,7 +710,7 @@ export default function Cuentas() {
                         </div>
                       ) : (
                         <div className="alert alert-info mb-4">
-                          <i className="bi bi-info-circle me-2"/>Sin abonos registrados
+                          <i className="bi bi-info-circle me-2" />Sin abonos registrados
                         </div>
                       )}
 
@@ -667,11 +720,11 @@ export default function Cuentas() {
                         <div>
                           <div className="d-flex justify-content-between align-items-center mb-3">
                             <h6>
-                              <i className="bi bi-cart me-2"/>Ventas 
+                              <i className="bi bi-cart me-2" />Ventas
                               <span className="badge bg-primary ms-2">{detalleCuenta.ultimasVentas.length}</span>
                             </h6>
                           </div>
-                          <div className="table-responsive" style={{maxHeight: '300px', overflow: 'auto'}}>
+                          <div className="table-responsive" style={{ maxHeight: '300px', overflow: 'auto' }}>
                             <table className="table table-sm table-hover">
                               <thead className="table-light">
                                 <tr>
@@ -683,20 +736,19 @@ export default function Cuentas() {
                               </thead>
                               <tbody>
                                 {detalleCuenta.ultimasVentas.slice(0, pageSize).map(venta => (
-                                  <tr 
-                                    key={venta?.id || Math.random()} 
+                                  <tr
+                                    key={venta?.id || Math.random()}
                                     className={ventaSeleccionada?.id === venta?.id ? 'table-active' : ''}
-                                    style={{cursor: 'pointer'}}
+                                    style={{ cursor: 'pointer' }}
                                     onClick={() => setVentaSeleccionada(ventaSeleccionada?.id === venta?.id ? null : venta)}
                                   >
                                     <td className="fw-semibold">#{venta?.ventaId || 'N/A'}</td>
                                     <td className="text-end fw-bold text-success">{formatMoney(venta?.totalVenta || 0)}</td>
                                     <td>
-                                      <span className={`badge fs-6 px-2 py-1 fw-semibold ${
-                                        venta?.status === 'COMPLETADA' ? 'bg-success' : 
-                                        venta?.status === 'PRESTAMO' ? 'bg-warning text-dark' : 
-                                        'bg-secondary'
-                                      }`}>
+                                      <span className={`badge fs-6 px-2 py-1 fw-semibold ${venta?.status === 'COMPLETADA' ? 'bg-success' :
+                                          venta?.status === 'PRESTAMO' ? 'bg-warning text-dark' :
+                                            'bg-secondary'
+                                        }`}>
                                         {venta?.status || 'N/A'}
                                       </span>
                                     </td>
@@ -709,7 +761,7 @@ export default function Cuentas() {
                         </div>
                       ) : (
                         <div className="alert alert-info">
-                          <i className="bi bi-info-circle me-2"/>Sin ventas registradas
+                          <i className="bi bi-info-circle me-2" />Sin ventas registradas
                         </div>
                       )}
                     </div>
@@ -729,24 +781,24 @@ export default function Cuentas() {
             <div className="card mt-4 shadow-sm">
               <div className="card-header d-flex justify-content-between align-items-center">
                 <h6>
-                  📦 Productos #{ventaSeleccionada.ventaId || 'N/A'} 
+                  📦 Productos #{ventaSeleccionada.ventaId || 'N/A'}
                   <span className="badge bg-success ms-2 fs-6">{formatMoney(ventaSeleccionada.totalVenta || 0)}</span>
                 </h6>
-                <button 
-                  className="btn btn-sm btn-outline-secondary" 
+                <button
+                  className="btn btn-sm btn-outline-secondary"
                   onClick={() => setVentaSeleccionada(null)}
                 >
-                  <i className="bi bi-x-circle"/>Cerrar
+                  <i className="bi bi-x-circle" />Cerrar
                 </button>
               </div>
               <div className="card-body p-0">
                 {loadingVenta ? (
                   <div className="p-4 text-center">
-                    <div className="spinner-border spinner-border-sm me-2" role="status"/>
+                    <div className="spinner-border spinner-border-sm me-2" role="status" />
                     Cargando productos...
                   </div>
                 ) : productosTabla.length > 0 ? (
-                  <div className="table-responsive" style={{maxHeight: '400px', overflow: 'auto'}}>
+                  <div className="table-responsive" style={{ maxHeight: '400px', overflow: 'auto' }}>
                     <table className="table table-sm table-hover">
                       <thead className="table-light sticky-top">
                         <tr>
@@ -780,7 +832,7 @@ export default function Cuentas() {
                   </div>
                 ) : (
                   <div className="p-4 text-center text-muted">
-                    <i className="bi bi-inbox fs-2 d-block mb-2"/>
+                    <i className="bi bi-inbox fs-2 d-block mb-2" />
                     No hay productos en esta venta
                   </div>
                 )}

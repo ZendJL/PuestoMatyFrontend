@@ -45,11 +45,16 @@ export const imprimirTicketVenta = async (ventaId, opciones = {}) => {
 
 const generarHtmlTicket = ({ venta, total, pagoCliente, cambio, esPrestamo, cuentaSeleccionada, productosVenta, fechaTicket, infoPago }) => {
   const pago = Number(pagoCliente) || 0;
+  const esTarjeta = infoPago?.modoPago === 'TARJETA';
 
   const seccionPagoDolares = () => {
-    if (!infoPago || infoPago.modoPago === 'PESOS') return '';
+    if (!infoPago) return '';
+    if (infoPago.modoPago === 'TARJETA') {
+      return `<div class="linea small"><span>  Forma de pago:</span><span>💳 Tarjeta</span></div>`;
+    }
     if (infoPago.modoPago === 'DOLARES') {
       return `
+        <div class="linea small"><span>  Forma de pago:</span><span>🇺🇸 Dólares</span></div>
         <div class="linea small">
           <span>  USD $${Number(infoPago.pagoDolares).toFixed(2)}</span>
           <span>T/C: ${infoPago.tasaCambio}</span>
@@ -58,6 +63,7 @@ const generarHtmlTicket = ({ venta, total, pagoCliente, cambio, esPrestamo, cuen
     }
     if (infoPago.modoPago === 'MIXTO') {
       return `
+        <div class="linea small"><span>  Forma de pago:</span><span>🔀 Mixto</span></div>
         <div class="linea small">
           <span>  Pesos:</span>
           <span>${formatMoney(Number(infoPago.pagoMixtoPesos))}</span>
@@ -68,7 +74,7 @@ const generarHtmlTicket = ({ venta, total, pagoCliente, cambio, esPrestamo, cuen
         </div>
       `;
     }
-    return '';
+    return `<div class="linea small"><span>  Forma de pago:</span><span>🇲🇽 Pesos</span></div>`;
   };
 
   return `
@@ -120,13 +126,15 @@ const generarHtmlTicket = ({ venta, total, pagoCliente, cambio, esPrestamo, cuen
           ${!esPrestamo ? `
             <div class="linea">
               <span>Pago</span>
-              <span>${formatMoney(pago)}</span>
+              <span>${esTarjeta ? '💳 Tarjeta' : formatMoney(pago)}</span>
             </div>
             ${seccionPagoDolares()}
-            <div class="linea">
-              <span>Cambio</span>
-              <span>${formatMoney(cambio)}</span>
-            </div>
+            ${!esTarjeta ? `
+              <div class="linea">
+                <span>Cambio</span>
+                <span>${formatMoney(cambio)}</span>
+              </div>
+            ` : ''}
           ` : '<div class="centro">*** SALDO PENDIENTE ***</div>'}
           <hr />
           <div class="centro">¡Gracias por su compra!</div>

@@ -109,7 +109,7 @@ export default function Cuentas() {
 
       // ✅ PREGUNTAR SI IMPRIMIR
       if (window.confirm('✅ Abono registrado correctamente.\n\n¿Desea imprimir el recibo?')) {
-        imprimirRecibo(abonoCreado, cuentaExpandida);
+        imprimirRecibo(abonoCreado, cuentaExpandida, modoPagoAbono);
       }
     },
     onError: (error) => {
@@ -696,7 +696,7 @@ export default function Cuentas() {
                                     <td>
                                       <button
                                         className="btn btn-sm btn-outline-primary"
-                                        onClick={() => imprimirRecibo(abono, cuentaExpandida)}
+                                        onClick={() => imprimirRecibo(abono, cuentaExpandida, abono.tipoPago || 'PESOS')}
                                         title="Reimprimir recibo"
                                       >
                                         <i className="bi bi-printer-fill" />
@@ -746,8 +746,8 @@ export default function Cuentas() {
                                     <td className="text-end fw-bold text-success">{formatMoney(venta?.totalVenta || 0)}</td>
                                     <td>
                                       <span className={`badge fs-6 px-2 py-1 fw-semibold ${venta?.status === 'COMPLETADA' ? 'bg-success' :
-                                          venta?.status === 'PRESTAMO' ? 'bg-warning text-dark' :
-                                            'bg-secondary'
+                                        venta?.status === 'PRESTAMO' ? 'bg-warning text-dark' :
+                                          'bg-secondary'
                                         }`}>
                                         {venta?.status || 'N/A'}
                                       </span>

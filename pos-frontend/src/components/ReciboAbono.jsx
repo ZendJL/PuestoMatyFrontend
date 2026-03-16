@@ -1,4 +1,4 @@
-export const imprimirRecibo = (abono, cuentaExpandida) => {
+export const imprimirRecibo = (abono, cuentaExpandida, modoPago = 'PESOS') => {
   const win = window.open('', '_blank', 'width=400,height=600');
   if (!win) {
     alert('No se pudo abrir la ventana de impresión.');
@@ -6,7 +6,6 @@ export const imprimirRecibo = (abono, cuentaExpandida) => {
   }
 
   try {
-    // ✅ Helper para formatear dinero (igual que tu utils)
     const formatMoney = (amount) => {
       return new Intl.NumberFormat('es-MX', {
         style: 'currency',
@@ -16,12 +15,18 @@ export const imprimirRecibo = (abono, cuentaExpandida) => {
       }).format(amount || 0);
     };
 
-    const fechaRecibo = new Date().toLocaleDateString('es-MX', { 
-      weekday: 'short', 
-      year: 'numeric', 
-      month: 'short', 
-      day: 'numeric' 
+    const fechaRecibo = new Date().toLocaleDateString('es-MX', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
     });
+
+    const etiquetaPago = {
+      PESOS:   '🇲🇽 Pesos',
+      DOLARES: '🇺🇸 Dólares',
+      TARJETA: '💳 Tarjeta',
+    }[modoPago] || '🇲🇽 Pesos';
 
     const html = `
       <html>
@@ -68,45 +73,50 @@ export const imprimirRecibo = (abono, cuentaExpandida) => {
               </div>
             ` : ''}
             <hr />
-            
+
             <div class="linea">
               <span class="saldo-anterior">Saldo Anterior:</span>
               <span class="saldo-anterior">${formatMoney(abono.viejoSaldo)}</span>
             </div>
-            
+
             <div class="linea linea-total">
               <span class="negrita abono-recibido">+ Abono:</span>
               <span class="negrita abono-recibido">${formatMoney(abono.cantidad)}</span>
             </div>
-            
+
+            <div class="linea" style="font-size: 10px; color: #555;">
+              <span>Forma de pago:</span>
+              <span>${etiquetaPago}</span>
+            </div>
+
             <hr />
-            
+
             <div class="linea linea-total">
               <span class="negrita">Saldo Actual:</span>
               <span class="negrita saldo-actual">${formatMoney(abono.nuevoSaldo)}</span>
             </div>
-            
+
             <hr />
-            
+
             <div class="centro negrita" style="margin-top: 8px;">
               ${abono.nuevoSaldo > 0 ? '*** SALDO PENDIENTE ***' : '*** CUENTA AL CORRIENTE ***'}
             </div>
-            
+
             <div class="centro" style="font-size: 9px; margin-top: 4px;">
               Firma del cliente: ________________
             </div>
-            
+
             <hr />
             <div class="centro">¡Gracias por su pago!</div>
             <div class="centro" style="font-size: 9px;">Puesto Maty - Mexicali BC</div>
           </div>
-          
+
           <script>
             window.onload = function () {
               window.focus();
               window.print();
-              window.onafterprint = function () { 
-                setTimeout(() => window.close(), 1000); 
+              window.onafterprint = function () {
+                setTimeout(() => window.close(), 1000);
               };
             };
           </script>
@@ -118,7 +128,6 @@ export const imprimirRecibo = (abono, cuentaExpandida) => {
     win.document.write(html);
     win.document.close();
 
-    // ✅ Auto imprimir (igual que imprimirTicketVenta)
     win.onload = () => {
       win.focus();
       win.print();

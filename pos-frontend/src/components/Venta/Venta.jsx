@@ -202,24 +202,26 @@ export default function Venta() {
   const finalizarVenta = async () => {
     if (venta.length === 0) return alert('Carrito vacío');
     if (modoPrestamo && !cuentaSeleccionada) return alert('Selecciona cuenta del cliente');
-    if (!modoPrestamo && pagoTotalMXN < total) return alert('Pago insuficiente');
+    if (!modoPrestamo && modoPago !== 'TARJETA' && pagoTotalMXN < total) return alert('Pago insuficiente');
 
     const invalido = venta.find(item => item.cantidad > (item.stock ?? 0));
     if (invalido) return alert(`Cantidad excede stock: ${invalido.descripcion}`);
 
     try {
       const ventaData = {
-        fecha: new Date().toISOString(),
-        cuentaId: modoPrestamo ? cuentaSeleccionada.id : null,
-        total,
-        status: modoPrestamo ? 'PRESTAMO' : 'COMPLETADA',
-        pagoCliente: modoPrestamo ? null : pagoTotalMXN,
-        ventaProductos: venta.map(item => ({
-          producto: { id: item.id, descripcion: item.descripcion },
-          cantidad: item.cantidad,
-          precioUnitario: item.precio,
-        })),
-      };
+  fecha: new Date().toISOString(),
+  cuentaId: modoPrestamo ? cuentaSeleccionada.id : null,
+  total,
+  status: modoPrestamo ? 'PRESTAMO' : 'COMPLETADA',
+  pagoCliente: modoPrestamo ? null : pagoTotalMXN,
+  tipoPago: modoPrestamo ? 'CREDITO' : modoPago,  // ← línea nueva
+  ventaProductos: venta.map(item => ({
+    producto: { id: item.id, descripcion: item.descripcion },
+    cantidad: item.cantidad,
+    precioUnitario: item.precio,
+  })),
+};
+
 
       const respuesta = await axios.post('/api/ventas', ventaData);
       const ventaGuardada = respuesta.data;

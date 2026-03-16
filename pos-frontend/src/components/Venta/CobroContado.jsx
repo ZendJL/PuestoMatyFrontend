@@ -6,6 +6,7 @@ const MODO_PAGO = {
   PESOS: 'PESOS',
   DOLARES: 'DOLARES',
   MIXTO: 'MIXTO',
+  TARJETA: 'TARJETA',  // ← nuevo
 };
 
 export default function CobroContado({
@@ -48,9 +49,9 @@ export default function CobroContado({
 
         {/* TASA DE CAMBIO */}
         <div className={`mb-3 p-2 ${bg} rounded`}>
-  <label className={`form-label fw-semibold mb-1 small ${theme === 'dark' ? 'text-light' : 'text-dark'}`}>
-    <i className="bi bi-currency-dollar me-1 text-success"/>Tasa de cambio (USD → MXN)
-  </label>
+          <label className={`form-label fw-semibold mb-1 small ${theme === 'dark' ? 'text-light' : 'text-dark'}`}>
+            <i className="bi bi-currency-dollar me-1 text-success"/>Tasa de cambio (USD → MXN)
+          </label>
           <div className="input-group input-group-sm">
             <span className="input-group-text">$1 USD =</span>
             <input
@@ -84,23 +85,24 @@ export default function CobroContado({
             </button>
           </div>
           <small className={theme === 'dark' ? 'text-light text-opacity-50' : 'text-muted'} style={{ fontSize: '0.7rem' }}>
-    {tasaInput !== String(tasaCambio)
-      ? <span className="text-danger fw-semibold">
-  <i className="bi bi-exclamation-circle-fill me-1"/>Sin guardar — presiona 💾
-</span>
-      : <span><i className="bi bi-cloud-check me-1"/>Guardado</span>
-    }
-  </small>
-</div>
+            {tasaInput !== String(tasaCambio)
+              ? <span className="text-danger fw-semibold">
+                  <i className="bi bi-exclamation-circle-fill me-1"/>Sin guardar — presiona 💾
+                </span>
+              : <span><i className="bi bi-cloud-check me-1"/>Guardado</span>
+            }
+          </small>
+        </div>
 
         {/* SELECTOR MODO DE PAGO */}
         <div className="mb-3">
           <label className="form-label fw-semibold mb-2 small">Tipo de pago</label>
-          <div className="btn-group w-100" role="group">
+          <div className="btn-group w-100 flex-wrap" role="group">
             {[
-              { key: MODO_PAGO.PESOS, label: '🇲🇽 Pesos', color: 'primary' },
-              { key: MODO_PAGO.DOLARES, label: '🇺🇸 Dólares', color: 'success' },
-              { key: MODO_PAGO.MIXTO, label: '🔀 Mixto', color: 'warning' },
+              { key: MODO_PAGO.PESOS,    label: '🇲🇽 Pesos',   color: 'primary' },
+              { key: MODO_PAGO.DOLARES,  label: '🇺🇸 Dólares', color: 'success' },
+              { key: MODO_PAGO.MIXTO,    label: '🔀 Mixto',    color: 'warning' },
+              { key: MODO_PAGO.TARJETA,  label: '💳 Tarjeta',  color: 'info' },  // ← nuevo
             ].map(({ key, label, color }) => (
               <button
                 key={key}
@@ -254,6 +256,16 @@ export default function CobroContado({
               );
             })()}
           </>
+        )}
+
+        {/* PAGO CON TARJETA ← nuevo */}
+        {modoPago === MODO_PAGO.TARJETA && (
+          <div className="alert alert-info py-3 mb-0 text-center">
+            <i className="bi bi-credit-card fs-2 d-block mb-2 text-info" />
+            <div className="fw-bold">Pago con tarjeta</div>
+            <div className="fs-5 fw-bold text-info mt-1">{formatMoney(total)}</div>
+            <small className="text-muted">El cobro se realiza en terminal</small>
+          </div>
         )}
 
       </div>

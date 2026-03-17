@@ -6,26 +6,19 @@ import { imprimirTicketVenta } from '../Venta/TicketPrinter';
 import DataTable from '../common/DataTable';
 
 function formatoFechaInput(date) {
-  return date.toISOString().substring(0, 10); // YYYY-MM-DD
+  return date.toISOString().substring(0, 10);
 }
 
 function getInicioFinPeriodo(tipo) {
   const hoy = new Date();
   const inicioDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
   if (tipo === 'dia') {
-    const finDia = new Date(
-      hoy.getFullYear(),
-      hoy.getMonth(),
-      hoy.getDate(),
-      23,
-      59,
-      59
-    );
+    const finDia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59);
     return { desde: inicioDia, hasta: finDia };
   }
   if (tipo === 'semana') {
-    const day = hoy.getDay(); // 0=domingo
-    const diff = hoy.getDate() - day + (day === 0 ? -6 : 1); // lunes
+    const day = hoy.getDay();
+    const diff = hoy.getDate() - day + (day === 0 ? -6 : 1);
     const inicioSemana = new Date(hoy.getFullYear(), hoy.getMonth(), diff);
     const finSemana = new Date(inicioSemana);
     finSemana.setDate(inicioSemana.getDate() + 6);
@@ -34,18 +27,18 @@ function getInicioFinPeriodo(tipo) {
   }
   if (tipo === 'mes') {
     const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
-    const finMes = new Date(
-      hoy.getFullYear(),
-      hoy.getMonth() + 1,
-      0,
-      23,
-      59,
-      59
-    );
+    const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0, 23, 59, 59);
     return { desde: inicioMes, hasta: finMes };
   }
   return { desde: inicioDia, hasta: hoy };
 }
+
+const ETIQUETA_PAGO = {
+  PESOS: '🇲🇽 Efectivo (Pesos)',
+  TARJETA: '💳 Tarjeta',
+  DOLARES: '🇺🇸 Dólares',
+  MIXTO: '🔀 Mixto',
+};
 
 export default function ReporteVentasGenerales() {
   const [tipoPeriodo, setTipoPeriodo] = useState('dia');
@@ -56,19 +49,15 @@ export default function ReporteVentasGenerales() {
   const [ventaSeleccionada, setVentaSeleccionada] = useState(null);
   const [mostrarDesglose, setMostrarDesglose] = useState(false);
 
-  // ✅ QUERY 1: Lista ventas OPTIMIZADA (1 query)
   const { data: ventasRaw = [], isLoading, error } = useQuery({
     queryKey: ['ventas-reporte-generales', desde, hasta],
     queryFn: async () => {
-      const res = await axios.get(
-        `/api/ventas/reporte-generales?desde=${desde}&hasta=${hasta}`
-      );
+      const res = await axios.get(`/api/ventas/reporte-generales?desde=${desde}&hasta=${hasta}`);
       return res.data;
     },
     enabled: !!desde && !!hasta,
   });
 
-  // ✅ QUERY 2: Productos de venta seleccionada (1 query al clic)
   const { data: productosVenta = [] } = useQuery({
     queryKey: ['productos-venta', ventaSeleccionada?.id],
     queryFn: async () => {
@@ -78,7 +67,6 @@ export default function ReporteVentasGenerales() {
     enabled: !!ventaSeleccionada?.id,
   });
 
-  // ✅ QUERY 3: Desglose lotes OPTIMIZADO (1 query al clic)
   const { data: desgloseLotes = [] } = useQuery({
     queryKey: ['costos-lotes-opt', ventaSeleccionada?.id],
     queryFn: async () => {
@@ -92,15 +80,11 @@ export default function ReporteVentasGenerales() {
 
   const ventasFiltradas = useMemo(() => {
     if (!ventas.length) return [];
-
     const texto = busqueda.toLowerCase();
     return ventas.filter((v) => {
       const idStr = String(v.id ?? '');
       const cuentaNombre = v.cuenta?.nombre ?? '';
-      return (
-        idStr.includes(texto) ||
-        cuentaNombre.toLowerCase().includes(texto)
-      );
+      return idStr.includes(texto) || cuentaNombre.toLowerCase().includes(texto);
     });
   }, [ventas, busqueda]);
 
@@ -123,44 +107,24 @@ export default function ReporteVentasGenerales() {
     setMostrarDesglose(false);
   };
 
-const reimprimirTicket = () => {
-  if (!ventaSeleccionada) return;
-  console.log(ventaSeleccionada.id);
- imprimirTicketVenta(ventaSeleccionada.id);
- /* const total = Number(ventaSeleccionada.total || 0);
-  const pagoCliente = Number(ventaSeleccionada.pagoCliente ?? ventaSeleccionada.total ?? 0);
-  const cambio = Math.max(pagoCliente - total, 0);
+  const reimprimirTicket = () => {
+    if (!ventaSeleccionada) return;
+    imprimirTicketVenta(ventaSeleccionada.id);
+  };
 
-  imprimirTicketVenta(ventaSeleccionada, {
-    total,
-    pagoCliente,
-    cambio,
-    modoPrestamo: ventaSeleccionada.status === 'PRESTAMO',
-    cuentaSeleccionada: ventaSeleccionada.cuenta || null,
-    productosVenta  // ✅ PASAR productosVenta al ticket
-  });*/
-};
-
-
-  if (isLoading) {
-    return <div className="fs-6 text-center py-5">Cargando ventas...</div>;
-  }
-  if (error) {
-    return <div className="text-danger fs-6 text-center py-5">Error al cargar ventas</div>;
-  }
+  if (isLoading) return <div className="fs-6 text-center py-5">Cargando ventas...</div>;
+  if (error) return <div className="text-danger fs-6 text-center py-5">Error al cargar ventas</div>;
 
   const totalDetalle = ventaSeleccionada ? Number(ventaSeleccionada.total || 0) : 0;
   const pagoDetalle = ventaSeleccionada ? Number(ventaSeleccionada.pagoCliente ?? ventaSeleccionada.total ?? 0) : 0;
   const cambioDetalle = Math.max(pagoDetalle - totalDetalle, 0);
 
-  // ✅ Ganancia con productos optimizados
   const gananciaVentaSeleccionada = productosVenta.reduce((s, vp) => {
     const precioVenta = vp.precioUnitario ?? 0;
     const cantidad = vp.cantidad || 0;
     const costoTotal = vp.costoTotal ?? 0;
     const costoUnitario = cantidad > 0 ? costoTotal / cantidad : 0;
-    const gananciaUnidad = precioVenta - costoUnitario;
-    return s + cantidad * gananciaUnidad;
+    return s + cantidad * (precioVenta - costoUnitario);
   }, 0);
 
   const columnasVentas = [
@@ -216,7 +180,7 @@ const reimprimirTicket = () => {
     },
     {
       id: 'status',
-      header: 'Status',
+      header: 'Estado',
       style: { width: 90 },
       accessor: (v) => v.status,
       sortable: true,
@@ -232,7 +196,7 @@ const reimprimirTicket = () => {
               : 'badge bg-success-subtle text-success-emphasis border border-success-subtle'
           }
         >
-          {v.status}
+          {v.status === 'PRESTAMO' ? 'Préstamo' : 'Contado'}
         </span>
       ),
     },
@@ -242,18 +206,12 @@ const reimprimirTicket = () => {
     <div className="d-flex justify-content-center">
       <div
         className="card shadow-sm fs-6 w-100"
-        style={{
-          maxWidth: 'calc(100vw - 100px)',
-          marginTop: '1.5rem',
-          marginBottom: '2rem',
-        }}
+        style={{ maxWidth: 'calc(100vw - 100px)', marginTop: '1.5rem', marginBottom: '2rem' }}
       >
         <div className="card-header py-2 d-flex justify-content-between align-items-center bg-primary text-white">
           <div>
             <h5 className="mb-0">Historial de ventas</h5>
-            <small className="text-white-50">
-              Consulta ventas de contado y préstamos en el período seleccionado.
-            </small>
+            <small className="text-white-50">Consulta ventas de contado y préstamos en el período seleccionado.</small>
           </div>
           <div className="text-end">
             <div className="small text-white-50">Total vendido</div>
@@ -262,7 +220,6 @@ const reimprimirTicket = () => {
         </div>
 
         <div className="card-body py-3 bg-body">
-          {/* Resumen KPIs */}
           <div className="row g-3 mb-3">
             <div className="col-md-3">
               <div className="border rounded p-2 bg-body">
@@ -290,62 +247,31 @@ const reimprimirTicket = () => {
             </div>
           </div>
 
-          {/* Filtros */}
           <div className="border rounded p-2 mb-3 bg-body">
             <div className="row g-2 align-items-end">
               <div className="col-md-4">
                 <label className="form-label mb-1 small">Período rápido</label>
                 <div className="btn-group btn-group-sm w-100" role="group">
-                  <button
-                    type="button"
-                    className={`btn btn-outline-primary ${tipoPeriodo === 'dia' ? 'active' : ''}`}
-                    onClick={() => aplicarPeriodo('dia')}
-                  >
-                    Hoy
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn btn-outline-primary ${tipoPeriodo === 'semana' ? 'active' : ''}`}
-                    onClick={() => aplicarPeriodo('semana')}
-                  >
-                    Semana
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn btn-outline-primary ${tipoPeriodo === 'mes' ? 'active' : ''}`}
-                    onClick={() => aplicarPeriodo('mes')}
-                  >
-                    Mes
-                  </button>
-                  <button
-                    type="button"
-                    className={`btn btn-outline-primary ${tipoPeriodo === 'rango' ? 'active' : ''}`}
-                    onClick={() => aplicarPeriodo('rango')}
-                  >
-                    Rango
-                  </button>
+                  {['dia', 'semana', 'mes', 'rango'].map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      className={`btn btn-outline-primary ${tipoPeriodo === t ? 'active' : ''}`}
+                      onClick={() => aplicarPeriodo(t)}
+                    >
+                      {t === 'dia' ? 'Hoy' : t.charAt(0).toUpperCase() + t.slice(1)}
+                    </button>
+                  ))}
                 </div>
               </div>
-
               <div className="col-auto">
                 <label className="form-label mb-1 small">Desde</label>
-                <input
-                  type="date"
-                  className="form-control form-control-sm"
-                  value={desde}
-                  onChange={(e) => setDesde(e.target.value)}
-                />
+                <input type="date" className="form-control form-control-sm" value={desde} onChange={(e) => setDesde(e.target.value)} />
               </div>
               <div className="col-auto">
                 <label className="form-label mb-1 small">Hasta</label>
-                <input
-                  type="date"
-                  className="form-control form-control-sm"
-                  value={hasta}
-                  onChange={(e) => setHasta(e.target.value)}
-                />
+                <input type="date" className="form-control form-control-sm" value={hasta} onChange={(e) => setHasta(e.target.value)} />
               </div>
-
               <div className="col-md-3">
                 <label className="form-label mb-1 small">Buscar venta</label>
                 <input
@@ -356,24 +282,16 @@ const reimprimirTicket = () => {
                   onChange={(e) => setBusqueda(e.target.value)}
                 />
               </div>
-
-              <div className="col small text-body-primary">
-                {totalVentas} ventas en el rango seleccionado.
-              </div>
+              <div className="col small text-body-primary">{totalVentas} ventas en el rango seleccionado.</div>
             </div>
           </div>
 
           <div className="row">
-            {/* Tabla de ventas */}
             <div className="col-md-7">
               <div className="card h-100">
                 <div className="card-header py-2 d-flex justify-content-between align-items-center bg-body-tertiary">
-                  <h6 className="mb-0">
-                    <i className="bi bi-list-ul me-2" />Ventas
-                  </h6>
-                  <small className="text-body-primary">
-                    Clic para ver detalle • {totalVentas} ventas encontradas
-                  </small>
+                  <h6 className="mb-0"><i className="bi bi-list-ul me-2" />Ventas</h6>
+                  <small className="text-body-primary">Clic para ver detalle • {totalVentas} ventas encontradas</small>
                 </div>
                 <div className="card-body p-0">
                   <DataTable
@@ -389,13 +307,10 @@ const reimprimirTicket = () => {
               </div>
             </div>
 
-            {/* Detalle de venta */}
             <div className="col-md-5 mt-3 mt-md-0">
               <div className="card h-100">
                 <div className="card-header py-2 d-flex justify-content-between align-items-center bg-body-tertiary">
-                  <h6 className="mb-0">
-                    <i className="bi bi-receipt me-2" />Venta #{ventaSeleccionada?.id || ''}
-                  </h6>
+                  <h6 className="mb-0"><i className="bi bi-receipt me-2" />Venta #{ventaSeleccionada?.id || ''}</h6>
                   <div className="d-flex gap-1">
                     <button
                       className="btn btn-sm btn-outline-primary"
@@ -423,8 +338,7 @@ const reimprimirTicket = () => {
 
                   {ventaSeleccionada && (
                     <>
-                      {/* Resumen venta */}
-                      <div className="small mb-3 p-2  rounded">
+                      <div className="small mb-3 p-2 rounded">
                         <div className="row g-2 mb-2">
                           <div className="col-6">
                             <strong>Folio:</strong> {ventaSeleccionada.id}
@@ -443,10 +357,17 @@ const reimprimirTicket = () => {
                           <div className="col-6 text-end">
                             <strong>Ganancia:</strong> <span className="text-success fw-bold">{formatMoney(gananciaVentaSeleccionada)}</span>
                           </div>
+                          {ventaSeleccionada.status !== 'PRESTAMO' && (
+                            <div className="col-12">
+                              <strong>Pago:</strong>{' '}
+                              <span className="text-primary">
+                                {ETIQUETA_PAGO[ventaSeleccionada.tipoPago] ?? ventaSeleccionada.tipoPago ?? '—'}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </div>
 
-                      {/* Productos */}
                       <div className="border rounded mb-2" style={{ maxHeight: 220, overflowY: 'auto' }}>
                         <table className="table table-sm table-striped mb-0">
                           <thead className="table-light sticky-top">
@@ -464,10 +385,8 @@ const reimprimirTicket = () => {
                               const cantidad = vp.cantidad || 0;
                               const costoTotal = vp.costoTotal ?? 0;
                               const costoUnitario = cantidad > 0 ? costoTotal / cantidad : 0;
-                              const gananciaUnidad = precioVenta - costoUnitario;
-                              const gananciaProducto = gananciaUnidad * cantidad;
+                              const gananciaProducto = (precioVenta - costoUnitario) * cantidad;
                               const importe = cantidad * precioVenta;
-
                               return (
                                 <tr key={vp.id}>
                                   <td className="pe-0 small">
@@ -485,24 +404,18 @@ const reimprimirTicket = () => {
                                 </tr>
                               );
                             })}
-
                             {productosVenta.length === 0 && (
                               <tr>
-                                <td colSpan={5} className="text-center text-muted py-3">
-                                  Sin productos en esta venta
-                                </td>
+                                <td colSpan={5} className="text-center text-muted py-3">Sin productos en esta venta</td>
                               </tr>
                             )}
                           </tbody>
                         </table>
                       </div>
 
-                      {/* Desglose lotes */}
                       {mostrarDesglose && (
                         <div className="mt-2">
-                          <div className="small fw-semibold mb-1 text-primary">
-                            📦 Desglose costos por lotes ({desgloseLotes.length})
-                          </div>
+                          <div className="small fw-semibold mb-1 text-primary">📦 Desglose costos por lotes ({desgloseLotes.length})</div>
                           <div className="border rounded bg-body" style={{ maxHeight: 180, overflowY: 'auto' }}>
                             <table className="table table-sm table-striped mb-0">
                               <thead className="table-light sticky-top">
@@ -526,12 +439,9 @@ const reimprimirTicket = () => {
                                     <td className="text-end fw-bold text-danger">{formatMoney(lote.costoTotal)}</td>
                                   </tr>
                                 ))}
-
                                 {desgloseLotes.length === 0 && (
                                   <tr>
-                                    <td colSpan={6} className="text-center text-muted small py-2">
-                                      Sin lotes en esta venta
-                                    </td>
+                                    <td colSpan={6} className="text-center text-muted small py-2">Sin lotes en esta venta</td>
                                   </tr>
                                 )}
                               </tbody>

@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { formatMoney } from '../../utils/format';
 
-const STOCK_BAJO_UMBRAL = 5;
+const INVENTARIO_BAJO_UMBRAL = 5;
 
 export default function Proveedores() {
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState(null);
@@ -16,9 +16,9 @@ export default function Proveedores() {
   const queryClient = useQueryClient();
 
   const { data: productosRaw = [], isLoading } = useQuery({
-    queryKey: ['productos-altas'], // ✅ mismo key que Productos.jsx — se sincroniza automáticamente
+    queryKey: ['productos-altas'],
     queryFn: () => axios.get('/api/productos').then(r => r.data),
-    staleTime: 0, // ✅ siempre refresca cuando se invalida desde otra pestaña
+    staleTime: 0,
   });
 
   const productos = useMemo(() =>
@@ -27,7 +27,6 @@ export default function Proveedores() {
     : []
   , [productosRaw]);
 
-  // Agrupar por proveedor
   const proveedores = useMemo(() => {
     const mapa = new Map();
     productos.forEach(p => {
@@ -40,7 +39,7 @@ export default function Proveedores() {
         nombre,
         productos: prods,
         totalProductos: prods.length,
-        totalStock: prods.reduce((s, p) => s + (p.cantidad || 0), 0),
+        totalInventario: prods.reduce((s, p) => s + (p.cantidad || 0), 0),
         valorInventario: prods.reduce((s, p) => s + (p.cantidad || 0) * (p.precioCompra || p.precio || 0), 0),
       }))
       .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
@@ -59,7 +58,7 @@ export default function Proveedores() {
     mutationFn: ({ id, cantidad, costo }) =>
       axios.post(`/api/productos/${id}/agregar-stock?cantidad=${cantidad}&precioCompra=${costo}`),
     onSuccess: () => {
-      alert('✅ Compra registrada y stock actualizado');
+      alert('✅ Compra registrada e inventario actualizado');
       setMostrarCompra(false);
       setProductoCompra(null);
       setCantidadCompra('');
@@ -87,7 +86,6 @@ export default function Proveedores() {
     <div className="d-flex justify-content-center">
       <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '0.25rem 0' }}>
 
-        {/* HEADER */}
         <div className="card-header p-2 bg-primary text-white border-bottom-0" style={{ minHeight: '48px' }}>
           <div className="d-flex align-items-center justify-content-between h-100">
             <h6 className="mb-0" style={{ fontSize: '0.95rem' }}>🏭 Proveedores</h6>
@@ -98,7 +96,6 @@ export default function Proveedores() {
         <div className="card-body py-3">
           <div className="row g-3">
 
-            {/* COLUMNA IZQUIERDA */}
             <div className="col-lg-4">
               <div className="mb-2">
                 <input
@@ -110,7 +107,6 @@ export default function Proveedores() {
                 />
               </div>
 
-              {/* KPIs */}
               <div className="row g-2 mb-3">
                 <div className="col-6">
                   <div className="border rounded p-2 text-center">
@@ -138,15 +134,15 @@ export default function Proveedores() {
                     <div>
                       <div className="fw-semibold">{pv.nombre}</div>
                       <small className={proveedorSeleccionado === pv.nombre ? 'text-white-50' : 'text-muted'}>
-                        {pv.totalProductos} producto{pv.totalProductos !== 1 ? 's' : ''} · {pv.totalStock} uds
+                        {pv.totalProductos} producto{pv.totalProductos !== 1 ? 's' : ''} · {pv.totalInventario} uds
                       </small>
                     </div>
                     <div className="text-end">
                       <div className={`small fw-bold ${proveedorSeleccionado === pv.nombre ? 'text-white' : 'text-success'}`}>
                         {formatMoney(pv.valorInventario)}
                       </div>
-                      {pv.productos.some(p => (p.cantidad ?? 0) <= STOCK_BAJO_UMBRAL) && (
-                        <span className="badge bg-warning text-dark ms-1" style={{ fontSize: '0.65rem' }}>⚠️ Stock bajo</span>
+                      {pv.productos.some(p => (p.cantidad ?? 0) <= INVENTARIO_BAJO_UMBRAL) && (
+                        <span className="badge bg-warning text-dark ms-1" style={{ fontSize: '0.65rem' }}>⚠️ Inventario bajo</span>
                       )}
                     </div>
                   </button>
@@ -160,13 +156,12 @@ export default function Proveedores() {
               </div>
             </div>
 
-            {/* COLUMNA DERECHA */}
             <div className="col-lg-8">
               {!provSelec ? (
                 <div className="text-center text-muted py-5">
                   <i className="bi bi-building fs-1 d-block mb-3 opacity-25" />
                   <h5>Selecciona un proveedor</h5>
-                  <p className="small">Haz click en un proveedor de la lista para ver sus productos</p>
+                  <p className="small">Haz clic en un proveedor de la lista para ver sus productos</p>
                 </div>
               ) : (
                 <div className="card shadow-sm">
@@ -182,7 +177,7 @@ export default function Proveedores() {
                       <thead className="table-light sticky-top">
                         <tr>
                           <th>Producto</th>
-                          <th className="text-end" style={{ width: 80 }}>Stock</th>
+                          <th className="text-end" style={{ width: 80 }}>Inventario</th>
                           <th className="text-end" style={{ width: 100 }}>Costo</th>
                           <th className="text-end" style={{ width: 100 }}>Precio</th>
                           <th className="text-center" style={{ width: 110 }}>Acción</th>
@@ -190,7 +185,7 @@ export default function Proveedores() {
                       </thead>
                       <tbody>
                         {provSelec.productos.map(p => {
-                          const stockBajo = (p.cantidad ?? 0) <= STOCK_BAJO_UMBRAL;
+                          const inventarioBajo = (p.cantidad ?? 0) <= INVENTARIO_BAJO_UMBRAL;
                           return (
                             <tr key={p.id} className={p.activo === false ? 'opacity-50' : ''}>
                               <td>
@@ -201,9 +196,9 @@ export default function Proveedores() {
                                 )}
                               </td>
                               <td className="text-end">
-                                <span className={`fw-bold ${stockBajo ? ((p.cantidad ?? 0) === 0 ? 'text-danger' : 'text-warning') : 'text-success'}`}>
+                                <span className={`fw-bold ${inventarioBajo ? ((p.cantidad ?? 0) === 0 ? 'text-danger' : 'text-warning') : 'text-success'}`}>
                                   {p.cantidad ?? 0}
-                                  {stockBajo && <i className="bi bi-exclamation-triangle-fill ms-1" style={{ fontSize: '0.7rem' }} />}
+                                  {inventarioBajo && <i className="bi bi-exclamation-triangle-fill ms-1" style={{ fontSize: '0.7rem' }} />}
                                 </span>
                               </td>
                               <td className="text-end text-muted small">{p.precioCompra ? formatMoney(p.precioCompra) : '—'}</td>
@@ -235,7 +230,6 @@ export default function Proveedores() {
         </div>
       </div>
 
-      {/* MODAL REGISTRAR COMPRA */}
       {mostrarCompra && productoCompra && (
         <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
           <div className="modal-dialog modal-dialog-centered">
@@ -251,7 +245,7 @@ export default function Proveedores() {
                 <div className="alert alert-info py-2 mb-3">
                   <strong>{productoCompra.descripcion}</strong>
                   <div className="small text-muted">
-                    Stock actual: <strong>{productoCompra.cantidad ?? 0}</strong> unidades
+                    Inventario actual: <strong>{productoCompra.cantidad ?? 0}</strong> unidades
                     {productoCompra.proveedor && <> · Proveedor: <strong>{productoCompra.proveedor}</strong></>}
                   </div>
                 </div>
@@ -283,7 +277,7 @@ export default function Proveedores() {
                       <div className="alert alert-success py-2 mb-0 text-center">
                         <strong>Total: {formatMoney(Number(cantidadCompra) * Number(costoCompra))}</strong>
                         <div className="small">
-                          Stock quedará en: <strong>{(productoCompra.cantidad || 0) + Number(cantidadCompra)} unidades</strong>
+                          Inventario quedará en: <strong>{(productoCompra.cantidad || 0) + Number(cantidadCompra)} unidades</strong>
                         </div>
                       </div>
                     </div>

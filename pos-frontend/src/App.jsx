@@ -106,7 +106,7 @@ function App() {
 
       <ResumenDia />
 
-      <main className="container my-3">
+      <main className="container-fluid my-3">
         <Routes>
           <Route path="/" element={<Venta />} />
           <Route path="/ventas" element={<Venta />} />

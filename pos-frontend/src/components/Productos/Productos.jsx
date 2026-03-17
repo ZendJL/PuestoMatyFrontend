@@ -480,14 +480,18 @@ export default function Productos() {
 
           <div className="card-body p-0">
             {/* TABS */}
-            <ul className="nav nav-tabs nav-fill border-bottom px-3 pt-2 mb-0" style={{ background: '#f8f9fa' }}>
+            <ul className="nav nav-tabs nav-fill border-bottom px-3 pt-2 mb-0">
               {[
                 { key: 'nuevo', label: 'Agregar nuevo', icon: 'bi-plus-circle', color: 'text-success' },
                 { key: 'buscar', label: 'Buscar / Editar', icon: 'bi-search', color: 'text-primary' },
               ].map(tab => (
                 <li className="nav-item" key={tab.key}>
                   <button
-                    className={`nav-link fw-semibold ${tabActiva === tab.key ? `active ${tab.color}` : 'text-muted'}`}
+                    className={`nav-link fw-semibold ${
+                      tabActiva === tab.key
+                        ? `active ${tab.color}`
+                        : 'text-secondary'
+                    }`}
                     onClick={() => setTabActiva(tab.key)}
                   >
                     <i className={`bi ${tab.icon} me-1`} />

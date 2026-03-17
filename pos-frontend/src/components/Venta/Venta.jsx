@@ -125,11 +125,16 @@ export default function Venta() {
   const agregarAlCarrito = useCallback((producto) => {
     const stock = producto.cantidad ?? 0;
     if (stock <= 0) { alert('❌ Sin inventario disponible'); return; }
-    const enCarrito = venta.find(i => i.id === producto.id)?.cantidad ?? 0;
-    if (enCarrito + 1 > stock) { alert(`❌ Máximo ${stock} unidades de "${producto.descripcion}"`); return; }
-    setVenta(prev => {
-      const existe = prev.find(i => i.id === producto.id);
-      if (existe) return prev.map(i => i.id === producto.id ? { ...i, cantidad: i.cantidad + 1 } : i);
+
+    const enCarrito = venta.find((i) => i.id === producto.id)?.cantidad ?? 0;
+    if (enCarrito + 1 > stock) {
+      // No alert: simplemente no agregar más
+      return;
+    }
+
+    setVenta((prev) => {
+      const existe = prev.find((i) => i.id === producto.id);
+      if (existe) return prev.map((i) => i.id === producto.id ? { ...i, cantidad: i.cantidad + 1 } : i);
       return [...prev, { id: producto.id, descripcion: producto.descripcion, codigo: producto.codigo, precio: producto.precio, cantidad: 1, stock }];
     });
     setBusquedaCodigo(''); setBusquedaNombre(''); setCodigoEscaneado('');
@@ -138,12 +143,20 @@ export default function Venta() {
   const quitarDelCarrito = useCallback((id) => setVenta(prev => prev.filter(item => item.id !== id)), []);
 
   const cambiarCantidad = useCallback((id, nuevaCantidadRaw) => {
-    let nuevaCantidad = Number(nuevaCantidadRaw);
-    if (Number.isNaN(nuevaCantidad) || nuevaCantidad < 1) nuevaCantidad = 1;
-    setVenta(prev => prev.map(item => {
+    // Permitir campo vacío o cero mientras el usuario edita
+    if (nuevaCantidadRaw === '' || nuevaCantidadRaw === '0') {
+      setVenta((prev) => prev.map((item) =>
+        item.id === id ? { ...item, cantidadRaw: nuevaCantidadRaw, cantidad: item.cantidad } : item
+      ));
+      return;
+    }
+    const nuevaCantidad = parseInt(nuevaCantidadRaw, 10);
+    if (Number.isNaN(nuevaCantidad) || nuevaCantidad < 1) return;
+    setVenta((prev) => prev.map((item) => {
       if (item.id !== id) return item;
-      if (nuevaCantidad > (item.stock ?? 0)) { alert(`No puedes vender más de ${item.stock} unidades`); return { ...item, cantidad: item.stock }; }
-      return { ...item, cantidad: nuevaCantidad };
+      // Clampear al stock sin alert
+      const cantidadFinal = Math.min(nuevaCantidad, item.stock ?? 0);
+      return { ...item, cantidad: cantidadFinal, cantidadRaw: String(cantidadFinal) };
     }));
   }, []);
 
@@ -175,17 +188,18 @@ export default function Venta() {
     setGuardando(true);
     try {
       const ventaData = {
-        fecha: new Date().toISOString(),
-        cuentaId: modoPrestamo ? cuentaSeleccionada.id : null,
-        total,
-        status: modoPrestamo ? 'PRESTAMO' : 'COMPLETADA',
-        pagoCliente: modoPrestamo ? null : pagoTotalMXN,
-        ventaProductos: venta.map(item => ({
-          producto: { id: item.id, descripcion: item.descripcion },
-          cantidad: item.cantidad,
-          precioUnitario: item.precio,
-        })),
-      };
+  fecha: new Date().toISOString(),
+  cuentaId: modoPrestamo ? cuentaSeleccionada.id : null,
+  total,
+  status: modoPrestamo ? 'PRESTAMO' : 'COMPLETADA',
+  pagoCliente: modoPrestamo ? null : pagoTotalMXN,
+  tipoPago: modoPrestamo ? 'CREDITO' : modoPago,
+  ventaProductos: venta.map(item => ({
+    producto: { id: item.id, descripcion: item.descripcion },
+    cantidad: item.cantidad,
+    precioUnitario: item.precio,
+  })),
+};
 
       const respuesta = await axios.post('/api/ventas', ventaData);
       const ventaGuardada = respuesta.data;

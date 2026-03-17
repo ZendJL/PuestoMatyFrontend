@@ -22,7 +22,6 @@ export default function Merma() {
   const inputBusquedaRef = useRef(null);
   const costoTimeoutRef = useRef(null);
 
-  // ⭐ AUTOFOCUS al montar componente
   useEffect(() => {
     console.log('🔥 MERMA REFRESH - Limpiando estado');
     setItemsMerma([]);
@@ -42,7 +41,6 @@ export default function Merma() {
     return () => clearTimeout(timer);
   }, []);
 
-  // ✅ QUERY 1: Productos (cache 5min) - PROTEGIDO
   const { data: productos = [], isLoading, error } = useQuery({
     queryKey: ['productos-merma'],
     queryFn: async () => {
@@ -52,7 +50,6 @@ export default function Merma() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // ✅ TOTALES PROTEGIDOS
   const totalItems = useMemo(() => 
     Array.isArray(itemsMerma) 
       ? itemsMerma.reduce((sum, i) => sum + (i?.cantidad || 0), 0) 
@@ -89,7 +86,6 @@ export default function Merma() {
     setTimeout(() => inputBusquedaRef.current?.focus(), 50);
   }, []);
 
-  // ⭐ LISTENER GLOBAL DE ESCANEO - PROTEGIDO
   useEffect(() => {
     const bufferEscaner = { current: '' };
     let timerEscaner = null;
@@ -161,7 +157,6 @@ export default function Merma() {
     return () => window.removeEventListener('keydown', handleEscaneo, true);
   }, [productos, agregarItemMerma]);
 
-  // ✅ FILTRADO LOCAL - PROTEGIDO
   const productosFiltrados = useMemo(() => {
     if (!Array.isArray(productos) || codigoEscaneado.length > 0) return [];
     
@@ -174,7 +169,6 @@ export default function Merma() {
       .slice(0, 10);
   }, [productos, busqueda, codigoEscaneado]);
 
-  // ✅ QUERY 2: Reporte histórico - PROTEGIDO
   const { data: reporteMermas = [], isFetching: loadingReporte } = useQuery({
     queryKey: ['reporte-mermas', fechaDesde, fechaHasta],
     queryFn: async () => {
@@ -189,7 +183,6 @@ export default function Merma() {
     staleTime: 10 * 60 * 1000,
   });
 
-  // 🔥 COSTO BATCH OPTIMIZADO - PROTEGIDO
   useEffect(() => {
     if (costoTimeoutRef.current) clearTimeout(costoTimeoutRef.current);
 
@@ -236,14 +229,26 @@ export default function Merma() {
     setTimeout(() => inputBusquedaRef.current?.focus(), 50);
   }, []);
 
-  const cambiarCantidadItem = useCallback((id, nuevaCantidad) => {
-    if (!id || Number.isNaN(nuevaCantidad) || nuevaCantidad < 1) return;
+  const cambiarCantidadItem = useCallback((id, nuevaCantidadRaw) => {
+    if (!id) return;
+    // Permitir campo vacío o cero mientras el usuario edita
+    if (nuevaCantidadRaw === '' || nuevaCantidadRaw === '0') {
+      setItemsMerma(prev =>
+        Array.isArray(prev)
+          ? prev.map(i => i?.id === id ? { ...i, cantidadRaw: nuevaCantidadRaw } : i)
+          : []
+      );
+      return;
+    }
+    const nuevaCantidad = parseInt(nuevaCantidadRaw, 10);
+    if (Number.isNaN(nuevaCantidad) || nuevaCantidad < 1) return;
     setItemsMerma(prev =>
       Array.isArray(prev)
         ? prev.map(i => {
             if (i?.id !== id) return i;
-            const cantidadSegura = Math.min(nuevaCantidad, i?.inventario ?? 0);
-            return { ...i, cantidad: cantidadSegura };
+            // Clampear al inventario sin alert
+            const cantidadFinal = Math.min(nuevaCantidad, i?.inventario ?? 0);
+            return { ...i, cantidad: cantidadFinal, cantidadRaw: String(cantidadFinal) };
           })
         : []
     );

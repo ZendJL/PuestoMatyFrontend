@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import ProductoSearchProductos from './ProductoSearchProductos';
 import ProductosPanel from './ProductosPanel';
-import { imprimirCodigoBarras, imprimirCodigosBarrasMasivo} from '../../utils/PrintBarcode';
+import { imprimirCodigoBarras, imprimirCodigosBarrasMasivo } from '../../utils/PrintBarcode';
+
+const STOCK_BAJO_UMBRAL = 5;
 
 const estadoInicial = {
   codigo: '',
@@ -15,89 +17,180 @@ const estadoInicial = {
   imprimirCodigo: false,
 };
 
-// ⭐ GENERADOR DE CÓDIGOS ÚNICOS
 const generarCodigoUnico = (codigosExistentes) => {
-  const prefijo = '99'; // Prefijo para códigos internos (no comerciales)
-  const min = 10000000; // 8 dígitos después del prefijo
+  const prefijo = '99';
+  const min = 10000000;
   const max = 99999999;
-
-  let intentos = 0;
-  const maxIntentos = 100;
-
-  while (intentos < maxIntentos) {
-    const numero = Math.floor(Math.random() * (max - min + 1)) + min;
-    const codigoGenerado = `${prefijo}${numero}`;
-
-    // Verificar que no exista en la BD
-    if (!codigosExistentes.includes(codigoGenerado)) {
-      return codigoGenerado;
-    }
-
-    intentos++;
+  for (let i = 0; i < 100; i++) {
+    const codigo = `${prefijo}${Math.floor(Math.random() * (max - min + 1)) + min}`;
+    if (!codigosExistentes.includes(codigo)) return codigo;
   }
-
-  // Si falla, usar timestamp + random
-  const timestamp = Date.now().toString().slice(-8);
-  const random = Math.floor(Math.random() * 100).toString().padStart(2, '0');
-  return `${prefijo}${timestamp}${random}`.slice(0, 10);
+  return `${prefijo}${Date.now().toString().slice(-8)}`;
 };
+
+function ProveedorSelect({ value, onChange, proveedoresExistentes }) {
+  const [query, setQuery] = useState('');
+  const [abierto, setAbierto] = useState(false);
+  const ref = useRef(null);
+
+  const filtrados = useMemo(() =>
+    proveedoresExistentes.filter(p =>
+      p.toLowerCase().includes((abierto ? query : (value || '')).toLowerCase())
+    )
+  , [proveedoresExistentes, query, value, abierto]);
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (ref.current && !ref.current.contains(e.target)) setAbierto(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const seleccionar = (val) => {
+    onChange(val);
+    setQuery('');
+    setAbierto(false);
+  };
+
+  const limpiar = (e) => {
+    e.stopPropagation();
+    onChange('');
+    setQuery('');
+  };
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <div className="input-group input-group-sm">
+        <input
+          type="text"
+          className="form-control"
+          placeholder="Buscar o escribir proveedor..."
+          value={abierto ? query : (value || '')}
+          onFocus={() => { setAbierto(true); setQuery(value || ''); }}
+          onChange={(e) => { setQuery(e.target.value); onChange(e.target.value); }}
+          onBlur={() => setTimeout(() => setAbierto(false), 150)}
+        />
+        {value && (
+          <button type="button" className="btn btn-outline-secondary" onMouseDown={limpiar} title="Quitar proveedor">Limpiar
+            <i className="bi bi-x-lg" />
+          </button>
+        )}
+      </div>
+      {abierto && (
+        <div
+          className="border rounded bg-white shadow-sm"
+          style={{ position: 'absolute', zIndex: 1050, width: '100%', maxHeight: '200px', overflowY: 'auto', top: '100%' }}
+        >
+          {filtrados.length === 0 && query.trim() && (
+            <div
+              className="px-3 py-2 text-primary small"
+              style={{ cursor: 'pointer' }}
+              onMouseDown={() => seleccionar(query.trim())}
+            >
+              <i className="bi bi-plus-circle me-1" />
+              Agregar "<strong>{query.trim()}</strong>"
+            </div>
+          )}
+          {filtrados.length === 0 && !query.trim() && (
+            <div className="px-3 py-2 text-muted small">Sin proveedores registrados aún</div>
+          )}
+          {filtrados.map(prov => (
+            <div
+              key={prov}
+              className={`px-3 py-2 small ${value === prov ? 'bg-primary text-white' : 'text-dark'}`}
+              style={{ cursor: 'pointer' }}
+              onMouseDown={() => seleccionar(prov)}
+              onMouseEnter={(e) => { if (value !== prov) e.currentTarget.classList.add('bg-light'); }}
+              onMouseLeave={(e) => { if (value !== prov) e.currentTarget.classList.remove('bg-light'); }}
+            >
+              {prov}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Productos() {
   const [form, setForm] = useState(estadoInicial);
   const [guardando, setGuardando] = useState(false);
+  const [tabActiva, setTabActiva] = useState('nuevo');
+
   const [busquedaProducto, setBusquedaProducto] = useState('');
   const [codigoEscaneado, setCodigoEscaneado] = useState('');
   const [productoSeleccionado, setProductoSeleccionado] = useState(null);
+
   const [cantidadAgregar, setCantidadAgregar] = useState('');
   const [precioCompraAgregar, setPrecioCompraAgregar] = useState('');
   const [descripcionEdit, setDescripcionEdit] = useState('');
   const [precioEdit, setPrecioEdit] = useState('');
   const [precioCompraEdit, setPrecioCompraEdit] = useState('');
+  const [proveedorEdit, setProveedorEdit] = useState('');
   const [activoEdit, setActivoEdit] = useState(true);
   const [codigoEdit, setCodigoEdit] = useState('');
+
   const [imprimiendoTodos, setImprimiendoTodos] = useState(false);
   const [soloActivos, setSoloActivos] = useState(true);
+  const [mostrarStockBajo, setMostrarStockBajo] = useState(false);
 
   const inputBusquedaRef = useRef(null);
   const inputCodigoRef = useRef(null);
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      inputBusquedaRef.current?.focus();
-      console.log('🎯 AUTOFOCUS aplicado en Productos');
-    }, 150);
-
+    const timer = setTimeout(() => inputBusquedaRef.current?.focus(), 150);
     return () => clearTimeout(timer);
   }, []);
 
   const { data: productosRaw } = useQuery({
     queryKey: ['productos-altas'],
-    queryFn: async () => {
-      const res = await axios.get('/api/productos');
-      return res.data;
-    },
+    queryFn: () => axios.get('/api/productos').then(r => r.data),
   });
 
-  const productos = Array.isArray(productosRaw)
-    ? productosRaw
-    : Array.isArray(productosRaw?.content)
-      ? productosRaw.content
-      : [];
+  const productos = useMemo(() =>
+    Array.isArray(productosRaw) ? productosRaw
+      : Array.isArray(productosRaw?.content) ? productosRaw.content
+      : []
+  , [productosRaw]);
 
-  // ⭐ FILTRAR PRODUCTOS GENERADOS (99) SEGÚN ESTADO ACTIVO
-  const productosGenerados = productos.filter(p => {
-    const esGenerado = p.codigo?.toString().startsWith('99');
-    if (!esGenerado) return false;
-    
-    // Si soloActivos está activado, filtrar por activo
-    if (soloActivos) {
-      return p.activo !== false;
-    }
-    
-    // Si está desactivado, incluir todos (activos e inactivos)
-    return true;
-  });
+  const proveedoresExistentes = useMemo(() => {
+    const conteo = {};
+    productos.forEach(p => {
+      const prov = (p.proveedor || '').trim();
+      if (prov) conteo[prov] = (conteo[prov] || 0) + 1;
+    });
+    return Object.entries(conteo)
+      .sort((a, b) => b[1] - a[1])
+      .map(([nombre]) => nombre);
+  }, [productos]);
+
+  const productosStockBajo = useMemo(() =>
+    productos.filter(p => p.activo !== false && (p.cantidad ?? 0) <= STOCK_BAJO_UMBRAL && (p.cantidad ?? 0) >= 0)
+  , [productos]);
+
+  const productosGenerados = useMemo(() =>
+    productos.filter(p => {
+      const esGenerado = p.codigo?.toString().startsWith('99');
+      if (!esGenerado) return false;
+      return soloActivos ? p.activo !== false : true;
+    })
+  , [productos, soloActivos]);
+
+  const limpiarSeleccion = useCallback(() => {
+    setProductoSeleccionado(null);
+    setBusquedaProducto('');
+    setCantidadAgregar('');
+    setPrecioCompraAgregar('');
+    setDescripcionEdit('');
+    setPrecioEdit('');
+    setPrecioCompraEdit('');
+    setProveedorEdit('');
+    setActivoEdit(true);
+    setCodigoEdit('');
+    setTimeout(() => inputBusquedaRef.current?.focus(), 50);
+  }, []);
 
   const seleccionarProducto = useCallback((producto) => {
     setProductoSeleccionado(producto);
@@ -105,15 +198,14 @@ export default function Productos() {
     setDescripcionEdit(producto.descripcion || '');
     setPrecioEdit(producto.precio != null ? String(producto.precio) : '');
     setPrecioCompraEdit(producto.precioCompra != null ? String(producto.precioCompra) : '');
+    setProveedorEdit(producto.proveedor || '');
     setActivoEdit(producto.activo == null ? true : producto.activo);
     setCodigoEdit(producto.codigo || '');
     setCantidadAgregar('');
     setPrecioCompraAgregar(producto.precioCompra != null ? String(producto.precioCompra) : '');
     setCodigoEscaneado('');
-
-    setTimeout(() => {
-      inputBusquedaRef.current?.focus();
-    }, 50);
+    setTabActiva('buscar');
+    setTimeout(() => inputBusquedaRef.current?.focus(), 50);
   }, []);
 
   useEffect(() => {
@@ -123,17 +215,14 @@ export default function Productos() {
 
     const handleEscaneo = (e) => {
       const elementoActivo = document.activeElement;
-      const esInput = elementoActivo?.tagName === 'INPUT';
-      const esTextarea = elementoActivo?.tagName === 'TEXTAREA';
-      const esSelect = elementoActivo?.tagName === 'SELECT';
+      const esBuscadorTexto = elementoActivo === inputBusquedaRef.current && elementoActivo?.type === 'text';
+      const esInputOtro =
+        (elementoActivo?.tagName === 'INPUT' ||
+          elementoActivo?.tagName === 'TEXTAREA' ||
+          elementoActivo?.tagName === 'SELECT') && !esBuscadorTexto;
 
-      const esBuscadorTexto =
-        elementoActivo === inputBusquedaRef.current &&
-        elementoActivo?.type === 'text';
-
-      if ((esInput || esTextarea || esSelect) && !esBuscadorTexto) {
+      if (esInputOtro) {
         if (escaneando) {
-          console.log('🧹 LIMPIANDO - Input activo');
           bufferEscaner.current = '';
           escaneando = false;
           setCodigoEscaneado('');
@@ -146,59 +235,40 @@ export default function Productos() {
         if (bufferEscaner.current.length > 0) {
           e.preventDefault();
           e.stopPropagation();
-
           const codigo = bufferEscaner.current.trim();
-          console.log('🔍 CÓDIGO ESCANEADO:', codigo);
-
-          const producto = productos.find(
-            p => p.codigo?.toString().trim() === codigo
-          );
-
+          const producto = productos.find(p => p.codigo?.toString().trim() === codigo);
           if (producto) {
-            console.log('✅ ENCONTRADO:', producto.descripcion);
             seleccionarProducto(producto);
           } else {
-            console.log('❌ NO ENCONTRADO:', codigo);
-            if (confirm(`Producto con código ${codigo} no existe.\n\n¿Quieres agregarlo como nuevo producto?`)) {
-              setForm(prev => ({ ...prev, codigo: codigo }));
-              setBusquedaProducto('');
-              setCodigoEscaneado('');
-              alert('✅ Código cargado en "Nuevo Producto". Completa los datos y guarda.');
+            if (confirm(`Código ${codigo} no encontrado.\n¿Agregar como nuevo producto?`)) {
+              setForm(prev => ({ ...prev, codigo }));
+              setTabActiva('nuevo');
             }
           }
-
           bufferEscaner.current = '';
           escaneando = false;
           setCodigoEscaneado('');
           clearTimeout(timerEscaner);
-          timerEscaner = null;
         }
         return;
       }
 
-      if (!/^[0-9]$/.test(e.key)) {
-        return;
-      }
-
+      if (!/^[0-9]$/.test(e.key)) return;
       if (!esBuscadorTexto) {
         e.preventDefault();
         e.stopPropagation();
       }
 
       if (!escaneando) {
-        console.log('🔢 INICIO ESCANEO PRODUCTOS');
         escaneando = true;
         bufferEscaner.current = '';
         setCodigoEscaneado('');
       }
 
       bufferEscaner.current += e.key;
-      console.log('🔢', bufferEscaner.current);
       setCodigoEscaneado(bufferEscaner.current);
-
       clearTimeout(timerEscaner);
       timerEscaner = setTimeout(() => {
-        console.log('⏱️ TIMEOUT');
         bufferEscaner.current = '';
         escaneando = false;
         setCodigoEscaneado('');
@@ -206,82 +276,46 @@ export default function Productos() {
     };
 
     window.addEventListener('keydown', handleEscaneo, true);
-    console.log('✅ ESCÁNER PRODUCTOS ACTIVADO');
-
     return () => {
       window.removeEventListener('keydown', handleEscaneo, true);
-      if (timerEscaner) clearTimeout(timerEscaner);
-      console.log('❌ ESCÁNER PRODUCTOS DESACTIVADO');
+      clearTimeout(timerEscaner);
     };
   }, [productos, seleccionarProducto]);
 
-  const productosFiltrados = productos
-    .filter((p) => {
+  const productosFiltrados = useMemo(() =>
+    productos.filter(p => {
       if (codigoEscaneado.length > 0) return false;
+      if (!busquedaProducto.trim()) return false;
       const q = busquedaProducto.toLowerCase();
-      return (
+      const activo = soloActivos ? p.activo !== false : true;
+      return activo && (
         p.codigo?.toLowerCase().includes(q) ||
         p.descripcion?.toLowerCase().includes(q)
       );
-    })
-    .slice(0, 10);
+    }).slice(0, 10)
+  , [productos, busquedaProducto, codigoEscaneado, soloActivos]);
 
   const totalProductos = productos.length;
-  const productosActivos = productos.filter((p) => p.activo !== false).length;
+  const productosActivos = useMemo(() => productos.filter(p => p.activo !== false).length, [productos]);
 
-  const buscarProductoPorCodigoODescripcion = (codigo, descripcion) => {
-    const cod = codigo?.trim().toLowerCase();
-    const desc = descripcion?.trim().toLowerCase();
-    if (!cod && !desc) return null;
-
-    return productos.find(p =>
-      (cod && p.codigo?.toLowerCase() === cod) ||
-      (desc && p.descripcion?.toLowerCase() === desc)
-    ) || null;
-  };
-
-  // ⭐ HANDLER PARA GENERAR CÓDIGO ALEATORIO
   const handleGenerarCodigo = () => {
     const codigosExistentes = productos.map(p => p.codigo?.toString() || '');
-    const nuevoCodigo = generarCodigoUnico(codigosExistentes);
-
-    setForm(prev => ({ ...prev, codigo: nuevoCodigo }));
-
-    console.log('🎲 CÓDIGO GENERADO:', nuevoCodigo);
+    setForm(prev => ({ ...prev, codigo: generarCodigoUnico(codigosExistentes) }));
   };
 
-  // ⭐ HANDLER PARA IMPRIMIR TODOS LOS CÓDIGOS GENERADOS (CON ORDEN ALFABÉTICO)
   const handleImprimirTodosGenerados = async () => {
     if (productosGenerados.length === 0) {
-      alert('❌ No hay productos con códigos generados (99) para imprimir');
+      alert('No hay productos con códigos generados (99) para imprimir');
       return;
     }
-
-    const tipoProductos = soloActivos ? 'activos' : 'totales (activos e inactivos)';
-    const confirmacion = true
-
-    if (!confirmacion) return;
-
     try {
       setImprimiendoTodos(true);
-
-      // ⭐ ORDENAR ALFABÉTICAMENTE POR DESCRIPCIÓN
-      const productosOrdenados = [...productosGenerados].sort((a, b) => {
-        const descA = (a.descripcion || '').toLowerCase();
-        const descB = (b.descripcion || '').toLowerCase();
-        return descA.localeCompare(descB, 'es', { sensitivity: 'base' });
-      });
-
-      console.log('📋 Productos ordenados alfabéticamente:', 
-        productosOrdenados.map(p => p.descripcion).join(', ')
+      const ordenados = [...productosGenerados].sort((a, b) =>
+        (a.descripcion || '').toLowerCase().localeCompare((b.descripcion || '').toLowerCase(), 'es', { sensitivity: 'base' })
       );
-
-      // ⭐ IMPRIMIR TODOS EN UNA SOLA VENTANA (YA ORDENADOS)
-      await imprimirCodigosBarrasMasivo(productosOrdenados);
-
-    } catch (error) {
-      console.error('❌ Error al imprimir códigos:', error);
-      alert('❌ Error al preparar la impresión. Revisa la consola.');
+      await imprimirCodigosBarrasMasivo(ordenados);
+    } catch {
+      alert('Error al preparar la impresión');
     } finally {
       setImprimiendoTodos(false);
     }
@@ -289,185 +323,211 @@ export default function Productos() {
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setForm((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
+    setForm(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!form.codigo || !form.descripcion || !form.precio || !form.cantidad) {
-      alert('Código, descripción, precio y cantidad son obligatorios');
-      return;
-    }
-
-    // ⭐ VERIFICAR SI EL CÓDIGO YA EXISTE
-    const existente = buscarProductoPorCodigoODescripcion(form.codigo, form.descripcion);
-
-    if (existente) {
-      // ⭐ NO HACER INSERT, SOLO SELECCIONAR EL INPUT
-      alert(`⚠️ El código "${form.codigo}" ya existe en la base de datos.\n\nProducto: ${existente.descripcion}\nPrecio: $${existente.precio}`);
-
-      // Enfocar el input de código para que el usuario corrija
-      inputCodigoRef.current?.focus();
-      inputCodigoRef.current?.select();
-
-      return; // NO continuar con el insert
-    }
-
+    if (!form.codigo.trim() || !form.descripcion.trim() || form.precio === '') return;
+    setGuardando(true);
     try {
-      setGuardando(true);
-      const producto = {
+      const payload = {
         codigo: form.codigo.trim(),
         descripcion: form.descripcion.trim(),
         precio: parseFloat(form.precio),
-        precioCompra: form.precioCompra === '' ? null : parseFloat(form.precioCompra),
-        proveedor: form.proveedor || null,
-        cantidad: parseInt(form.cantidad, 10),
+        precioCompra: form.precioCompra !== '' ? parseFloat(form.precioCompra) : null,
+        proveedor: form.proveedor.trim() || null,
+        cantidad: parseInt(form.cantidad || '0', 10),
         activo: true,
       };
-
-      const response = await axios.post('/api/productos', producto);
-
+      await axios.post('/api/productos', payload);
       if (form.imprimirCodigo) {
-        await imprimirCodigoBarras({
-          codigo: response.data.codigo || form.codigo,
-          descripcion: response.data.descripcion || form.descripcion
-        }, false);
+        await imprimirCodigoBarras(payload);
       }
-
-      alert('✅ Nuevo producto creado correctamente' +
-        (form.imprimirCodigo ? ' y código enviado a impresora' : ''));
-
-      setForm(estadoInicial);
       queryClient.invalidateQueries({ queryKey: ['productos-altas'] });
-      queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
-
-      setTimeout(() => {
-        inputBusquedaRef.current?.focus();
-      }, 50);
+      setForm(estadoInicial);
+      inputCodigoRef.current?.focus();
     } catch (err) {
-      console.error(err);
-      alert('❌ Error al crear producto');
+      alert('Error al guardar: ' + (err.response?.data?.message || err.message));
     } finally {
       setGuardando(false);
     }
   };
 
-  const limpiarSeleccion = () => {
-    setProductoSeleccionado(null);
-    setDescripcionEdit('');
-    setPrecioEdit('');
-    setPrecioCompraEdit('');
-    setCodigoEdit('');
-    setActivoEdit(true);
-    setCantidadAgregar('');
-    setPrecioCompraAgregar('');
-    setBusquedaProducto('');
-    setCodigoEscaneado('');
+  const handleGuardarCambios = async () => {
+    if (!productoSeleccionado) return;
+    try {
+      await axios.put(`/api/productos/${productoSeleccionado.id}`, {
+        codigo: codigoEdit.trim(),
+        descripcion: descripcionEdit.trim(),
+        precio: parseFloat(precioEdit),
+        precioCompra: precioCompraEdit !== '' ? parseFloat(precioCompraEdit) : null,
+        proveedor: proveedorEdit.trim() || null,
+        activo: activoEdit,
+        cantidad: productoSeleccionado.cantidad,
+      });
+      queryClient.invalidateQueries({ queryKey: ['productos-altas'] });
+      alert('✅ Cambios guardados');
+    } catch (err) {
+      alert('Error al guardar: ' + (err.response?.data?.message || err.message));
+    }
+  };
 
-    setTimeout(() => {
-      inputBusquedaRef.current?.focus();
-    }, 50);
+  const inventarioBadge = (cantidad) => {
+    const n = cantidad ?? 0;
+    if (n === 0) return 'bg-danger';
+    if (n <= STOCK_BAJO_UMBRAL) return 'bg-warning text-dark';
+    return 'bg-success';
   };
 
   return (
     <div className="d-flex justify-content-center">
-      <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '0.25rem 0' }}>
-        {/* ✅ HEADER ULTRA COMPACTO Y MÁS ARRIBA */}
-        <div className="card-header p-2 bg-primary text-white border-bottom-0" style={{ minHeight: '48px' }}>
-          <div className="row align-items-center g-0 h-100">
-            <div className="col-md-5">
-              <div className="d-flex align-items-center h-100">
-                <h6 className="mb-0 me-2" style={{ fontSize: '0.95rem', lineHeight: 1.1 }}>📦 Gestión Productos</h6>
-                <small className="opacity-75" style={{ fontSize: '0.7rem' }}>
-                  {codigoEscaneado.length > 0 && '🔢 '}
-                </small>
+      <div className="w-100" style={{ maxWidth: 'calc(100vw - 48px)', margin: '0.4rem 0' }}>
+        <div className="card shadow border-0 overflow-hidden">
+
+          {/* HEADER */}
+          <div
+            className="card-header text-white border-0 py-2"
+            style={{ background: 'linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%)' }}
+          >
+            <div className="row align-items-center g-2">
+              <div className="col-sm-4">
+                <h6 className="mb-0 fw-bold">📦 Gestión de Productos</h6>
               </div>
-            </div>
-            <div className="col-md-3 text-center">
-              <div className="fs-4 fw-bold" style={{ fontSize: '1.2rem' }}>{totalProductos}</div>
-              <small className="opacity-75" style={{ fontSize: '0.65rem' }}>{productosActivos} activos</small>
-            </div>
-            {/* ⭐ BOTÓN Y CHECKBOX PARA IMPRIMIR CÓDIGOS GENERADOS */}
-            <div className="col-md-4 text-end">
-              <div className="d-flex flex-column align-items-end gap-1">
-                <button
-                  className="btn btn-light btn-sm fw-bold px-2 py-1"
-                  style={{ fontSize: '0.75rem' }}
-                  onClick={handleImprimirTodosGenerados}
-                  disabled={imprimiendoTodos || productosGenerados.length === 0}
-                  title={`Imprimir ${productosGenerados.length} códigos generados (99)`}
-                >Imprimir Códigos generados
-                  {imprimiendoTodos ? (
-                    <>
-                      <span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
-                      Impr...
-                    </>
-                  ) : (
-                    <>
-                      <i className="bi bi-printer-fill me-1" />
-                      ({productosGenerados.length})
-                    </>
-                  )}
-                </button>
-                <div className="form-check  form-switch-sm">
+              <div className="col-sm-3 text-center">
+                <span className="fw-bold fs-6">{totalProductos}</span>
+                <small className="opacity-75 ms-1">total ({productosActivos} activos)</small>
+              </div>
+              <div className="col-sm-5 d-flex justify-content-sm-end align-items-center gap-2 flex-wrap">
+                <div className="form-check form-switch mb-0 text-white">
                   <input
                     className="form-check-input"
                     type="checkbox"
                     id="soloActivosCheck"
                     checked={soloActivos}
                     onChange={(e) => setSoloActivos(e.target.checked)}
-                  />Sólo activos
+                  />
+                  <label className="form-check-label small" htmlFor="soloActivosCheck">
+                    Sólo activos
+                  </label>
                 </div>
+                <button
+                  className="btn btn-light btn-sm fw-semibold"
+                  onClick={handleImprimirTodosGenerados}
+                  disabled={imprimiendoTodos || productosGenerados.length === 0}
+                >
+                  {imprimiendoTodos
+                    ? <><span className="spinner-border spinner-border-sm me-1" />Imprimiendo...</>
+                    : <><i className="bi bi-printer-fill me-1" />Códigos ({productosGenerados.length})</>}
+                </button>
               </div>
             </div>
           </div>
-        </div>
 
-        <div className="card-body py-3">
-          <div className="row g-3">
-            <div className="col-lg-4">
-              <div className="card border-start border-success border-3 shadow-sm h-100">
-                <div className="card-body p-3">
-                  <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h6 className="mb-0">
-                      <i className="bi bi-plus-circle-fill me-2 text-success" />Nuevo Producto
-                    </h6>
-                  </div>
+          {/* ALERTA INVENTARIO BAJO */}
+          {productosStockBajo.length > 0 && (
+            <div className="border-bottom">
+              <button
+                className="btn btn-warning w-100 rounded-0 d-flex align-items-center justify-content-between py-2 px-3 fw-semibold"
+                style={{ fontSize: '0.85rem' }}
+                onClick={() => setMostrarStockBajo(!mostrarStockBajo)}
+              >
+                <span>
+                  ⚠️ {productosStockBajo.length} producto{productosStockBajo.length !== 1 ? 's' : ''} con inventario bajo (≤{STOCK_BAJO_UMBRAL})
+                </span>
+                <i className={`bi ${mostrarStockBajo ? 'bi-chevron-up' : 'bi-chevron-down'}`} />
+              </button>
+              {mostrarStockBajo && (
+                <div className="p-2 bg-warning bg-opacity-10" style={{ maxHeight: '220px', overflowY: 'auto' }}>
+                  <table className="table table-sm table-hover mb-0" style={{ fontSize: '0.8rem' }}>
+                    <thead className="table-warning sticky-top">
+                      <tr>
+                        <th>Producto</th>
+                        <th className="text-center" style={{ width: 90 }}>Inventario</th>
+                        <th className="text-center" style={{ width: 70 }}>Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...productosStockBajo]
+                        .sort((a, b) => (a.cantidad ?? 0) - (b.cantidad ?? 0))
+                        .map(p => (
+                          <tr key={p.id}>
+                            <td>
+                              <div className="fw-semibold">{p.descripcion}</div>
+                              <small className="text-muted">#{p.codigo}</small>
+                            </td>
+                            <td className="text-center">
+                              <span className={`badge ${inventarioBadge(p.cantidad)}`}>
+                                {p.cantidad ?? 0}
+                              </span>
+                            </td>
+                            <td className="text-center">
+                              <button
+                                className="btn btn-sm btn-outline-primary py-0"
+                                onClick={() => { seleccionarProducto(p); setMostrarStockBajo(false); }}
+                              >
+                                Ver
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
 
-                  <form onSubmit={handleSubmit} className="row g-2">
-                    <div className="col-12">
-                      <label className="form-label fw-semibold mb-1 small">Código *</label>
-                      <input
-                        ref={inputCodigoRef}
-                        type="text"
-                        name="codigo"
-                        className="form-control form-control-sm"
-                        value={form.codigo}
-                        onChange={handleChange}
-                        placeholder="Escanear o generar código..."
-                        required
-                      />
-                      <button
-                        type="button"
-                        className="btn btn-success w-100 mt-2 btn-sm fw-bold"
-                        onClick={handleGenerarCodigo}
-                        title="Generar código aleatorio único"
-                      >
-                        <i className="bi bi-dice-5-fill me-2" />
-                        Generar Código Aleatorio
-                      </button>
-                      <small className="text-muted d-block mt-1">
-                        <i className="bi bi-info-circle me-1" />
-                        Códigos internos: formato 99XXXXXXXX
-                      </small>
+          <div className="card-body p-0">
+            {/* TABS */}
+            <ul className="nav nav-tabs nav-fill border-bottom px-3 pt-2 mb-0" style={{ background: '#f8f9fa' }}>
+              {[
+                { key: 'nuevo', label: 'Agregar nuevo', icon: 'bi-plus-circle', color: 'text-success' },
+                { key: 'buscar', label: 'Buscar / Editar', icon: 'bi-search', color: 'text-primary' },
+              ].map(tab => (
+                <li className="nav-item" key={tab.key}>
+                  <button
+                    className={`nav-link fw-semibold ${tabActiva === tab.key ? `active ${tab.color}` : 'text-muted'}`}
+                    onClick={() => setTabActiva(tab.key)}
+                  >
+                    <i className={`bi ${tab.icon} me-1`} />
+                    {tab.label}
+                    {tab.key === 'buscar' && productoSeleccionado && (
+                      <span className="badge bg-primary ms-1" style={{ fontSize: '0.65rem' }}>1</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+
+            <div className="p-3">
+
+              {/* ── TAB NUEVO ─────────────────────────────────────── */}
+              {tabActiva === 'nuevo' && (
+                <form onSubmit={handleSubmit}>
+                  <div className="row g-2">
+                    <div className="col-md-2 col-lg-4">
+                      <label className="form-label fw-semibold small mb-1">Código *</label>
+                      <div className="input-group input-group-sm">
+                        <input
+                          ref={inputCodigoRef}
+                          type="text"
+                          name="codigo"
+                          className="form-control"
+                          value={form.codigo}
+                          onChange={handleChange}
+                          placeholder="Escanear o escribir"
+                          required
+                        />
+                        <button type="button" className="btn btn-outline-success" onClick={handleGenerarCodigo} title="Generar código">
+                          <i className="bi bi-dice-5-fill" />Generar código
+                        </button>
+                      </div>
+                      <small className="text-muted" style={{ fontSize: '0.68rem' }}>Internos: 99XXXXXXXX</small>
                     </div>
 
-                    <div className="col-12">
-                      <label className="form-label fw-semibold mb-1 small">Descripción *</label>
+                    <div className="col-md-5 col-lg-6">
+                      <label className="form-label fw-semibold small mb-1">Descripción *</label>
                       <input
                         type="text"
                         name="descripcion"
@@ -478,24 +538,43 @@ export default function Productos() {
                         required
                       />
                     </div>
-                    <div className="col-6">
-                      <label className="form-label fw-semibold mb-1 small">Precio venta *</label>
+                    </div>
+                  <div className="row g-2">
+
+                    <div className="col-md-2 col-lg-2">
+                      <label className="form-label fw-semibold small mb-1">Precio *</label>
                       <div className="input-group input-group-sm">
                         <span className="input-group-text">$</span>
                         <input
                           type="number"
                           name="precio"
                           className="form-control"
-                          step="0.01"
-                          min="0"
+                          step="0.01" min="0"
                           value={form.precio}
                           onChange={handleChange}
                           required
                         />
                       </div>
                     </div>
-                    <div className="col-6">
-                      <label className="form-label fw-semibold mb-1 small">Inventario inicial *</label>
+
+                    <div className="col-md-2 col-lg-2">
+                      <label className="form-label fw-semibold small mb-1">Costo</label>
+                      <div className="input-group input-group-sm">
+                        <span className="input-group-text">$</span>
+                        <input
+                          type="number"
+                          name="precioCompra"
+                          className="form-control"
+                          step="0.01" min="0"
+                          value={form.precioCompra}
+                          onChange={handleChange}
+                          placeholder="Opcional"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="col-md-2 col-lg-2">
+                      <label className="form-label fw-semibold small mb-1">Cantidad *</label>
                       <input
                         type="number"
                         name="cantidad"
@@ -506,32 +585,19 @@ export default function Productos() {
                         required
                       />
                     </div>
-                    <div className="col-12">
-                      <label className="form-label fw-semibold mb-1 small">Costo compra</label>
-                      <div className="input-group input-group-sm">
-                        <span className="input-group-text">$</span>
-                        <input
-                          type="number"
-                          name="precioCompra"
-                          className="form-control"
-                          step="0.01"
-                          min="0"
-                          value={form.precioCompra}
-                          onChange={handleChange}
-                        />
-                      </div>
-                    </div>
-                    <div className="col-12">
-                      <label className="form-label fw-semibold mb-1 small">Proveedor</label>
-                      <input
-                        type="text"
-                        name="proveedor"
-                        className="form-control form-control-sm"
+
+                    <div className="col-md-6 col-lg-4">
+                      <label className="form-label fw-semibold small mb-1">
+                        Proveedor <span className="text-muted fw-normal">(opcional)</span>
+                      </label>
+                      <ProveedorSelect
                         value={form.proveedor}
-                        onChange={handleChange}
+                        onChange={(val) => setForm(prev => ({ ...prev, proveedor: val }))}
+                        proveedoresExistentes={proveedoresExistentes}
                       />
                     </div>
-                    <div className="col-12">
+
+                    <div className="col-md-3 col-lg-3 d-flex align-items-end pb-1">
                       <div className="form-check">
                         <input
                           className="form-check-input"
@@ -542,63 +608,220 @@ export default function Productos() {
                           onChange={handleChange}
                         />
                         <label className="form-check-label small fw-semibold" htmlFor="imprimirCodigo">
-                          <i className="bi bi-printer-fill me-1" /> Imprimir código de barras
+                          Imprimir código al guardar
                         </label>
                       </div>
                     </div>
-                    <div className="col-12 d-flex gap-2">
-                      <button
-                        type="button"
-                        className="btn btn-outline-secondary flex-fill btn-sm"
-                        onClick={() => setForm(estadoInicial)}
-                        disabled={guardando}
-                      >
-                        Limpiar
-                      </button>
-                      <button
-                        type="submit"
-                        className="btn btn-success flex-fill btn-sm fw-bold"
-                        disabled={guardando}
-                      >
-                        {guardando ? 'Guardando...' : 'Crear Producto'}
+
+                    <div className="col-12 mt-3">
+                      <button type="submit" className="btn btn-success fw-bold px-4" disabled={guardando}>
+                        {guardando
+                          ? <><span className="spinner-border spinner-border-sm me-2" />Guardando...</>
+                          : <><i className="bi bi-save-fill me-2" />Guardar producto</>}
                       </button>
                     </div>
-                  </form>
+                  </div>
+                </form>
+              )}
+
+              {/* ── TAB BUSCAR / EDITAR ──────────────────────────── */}
+              {tabActiva === 'buscar' && (
+                <div>
+                  {/* Buscador siempre visible */}
+                  <div className="row g-2 mb-2">
+                    <div className="col-md-5 col-lg-4">
+                      <label className="form-label fw-semibold small mb-1">Buscar por código o descripción</label>
+                      <input
+                        ref={inputBusquedaRef}
+                        type="text"
+                        className="form-control"
+                        placeholder="Escribe o escanea..."
+                        value={busquedaProducto}
+                        onChange={(e) => {
+                          setBusquedaProducto(e.target.value);
+                          if (!e.target.value.trim()) limpiarSeleccion();
+                        }}
+                        autoFocus
+                      />
+                      {codigoEscaneado && (
+                        <div className="alert alert-info py-1 mt-1 small mb-0">
+                          Escaneando: <strong>{codigoEscaneado}</strong>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Lista de resultados — solo si NO hay producto seleccionado */}
+                  {!productoSeleccionado && (
+                    <div className="border rounded mb-3" style={{ maxHeight: '320px', overflowY: 'auto' }}>
+                      {!busquedaProducto.trim() ? (
+                        <div className="text-center text-muted p-4">
+                          <i className="bi bi-upc-scan fs-2 d-block mb-2 opacity-50" />
+                          Escribe para buscar o escanea un código
+                        </div>
+                      ) : productosFiltrados.length === 0 ? (
+                        <div className="text-center text-muted p-4">
+                          <i className="bi bi-search fs-2 d-block mb-2 opacity-50" />
+                          Sin resultados para "<strong>{busquedaProducto}</strong>"
+                        </div>
+                      ) : (
+                        <table className="table table-hover table-sm mb-0" style={{ fontSize: '0.85rem' }}>
+                          <thead className="table-light sticky-top">
+                            <tr>
+                              <th>Descripción</th>
+                              <th>Código</th>
+                              <th>Proveedor</th>
+                              <th className="text-end">Precio</th>
+                              <th className="text-center">Inventario</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {productosFiltrados.map(p => (
+                              <tr
+                                key={p.id}
+                                onClick={() => seleccionarProducto(p)}
+                                style={{ cursor: 'pointer' }}
+                                className="align-middle"
+                              >
+                                <td className="fw-semibold">{p.descripcion}</td>
+                                <td className="text-muted">{p.codigo}</td>
+                                <td className="text-muted">{p.proveedor || '—'}</td>
+                                <td className="text-end">${Number(p.precio || 0).toFixed(2)}</td>
+                                <td className="text-center">
+                                  <span className={`badge ${inventarioBadge(p.cantidad)}`}>
+                                    {p.cantidad ?? 0}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Panel de edición — aparece cuando hay producto seleccionado */}
+                  {productoSeleccionado && (
+                    <div>
+                      {/* Cabecera del producto */}
+                      <div className="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom">
+                        <div>
+                          <h6 className="mb-0 fw-bold">{productoSeleccionado.descripcion}</h6>
+                          <small className="text-muted">
+                            #{productoSeleccionado.codigo} ·&nbsp;
+                            <span className={`fw-semibold ${(productoSeleccionado.cantidad ?? 0) <= STOCK_BAJO_UMBRAL ? 'text-danger' : 'text-success'}`}>
+                              {productoSeleccionado.cantidad ?? 0} en inventario
+                            </span>
+                          </small>
+                        </div>
+                        <button className="btn btn-sm btn-outline-secondary" onClick={limpiarSeleccion}>
+                          <i className="bi bi-x-lg me-1" />Cambiar producto
+                        </button>
+                      </div>
+
+                      {/* Datos editables */}
+                      <div className="row g-2 mb-3">
+                        <div className="col-md-3 col-lg-2">
+                          <label className="form-label fw-semibold small mb-1">Código</label>
+                          <input
+                            type="text"
+                            className="form-control form-control-sm"
+                            value={codigoEdit}
+                            onChange={(e) => setCodigoEdit(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="col-md-5 col-lg-4">
+                          <label className="form-label fw-semibold small mb-1">Descripción</label>
+                          <input
+                            type="text"
+                            className="form-control form-control-sm"
+                            value={descripcionEdit}
+                            onChange={(e) => setDescripcionEdit(e.target.value)}
+                          />
+                        </div>
+
+                        <div className="col-md-2 col-lg-2">
+                          <label className="form-label fw-semibold small mb-1">Precio</label>
+                          <div className="input-group input-group-sm">
+                            <span className="input-group-text">$</span>
+                            <input
+                              type="number"
+                              className="form-control"
+                              min="0" step="0.01"
+                              value={precioEdit}
+                              onChange={(e) => setPrecioEdit(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="col-md-2 col-lg-2">
+                          <label className="form-label fw-semibold small mb-1">Costo</label>
+                          <div className="input-group input-group-sm">
+                            <span className="input-group-text">$</span>
+                            <input
+                              type="number"
+                              className="form-control"
+                              min="0" step="0.01"
+                              value={precioCompraEdit}
+                              onChange={(e) => setPrecioCompraEdit(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="col-md-5 col-lg-4">
+                          <label className="form-label fw-semibold small mb-1">
+                            Proveedor <span className="text-muted fw-normal">(opcional)</span>
+                          </label>
+                          <ProveedorSelect
+                            value={proveedorEdit}
+                            onChange={setProveedorEdit}
+                            proveedoresExistentes={proveedoresExistentes}
+                          />
+                        </div>
+
+                        <div className="col-md-3 col-lg-3 d-flex align-items-end pb-1">
+                          <div className="form-check form-switch">
+                            <input
+                              className="form-check-input"
+                              type="checkbox"
+                              id="activoEdit"
+                              checked={activoEdit}
+                              onChange={(e) => setActivoEdit(e.target.checked)}
+                            />
+                            <label className="form-check-label small fw-semibold" htmlFor="activoEdit">
+                              Producto activo
+                            </label>
+                          </div>
+                        </div>
+
+                        <div className="col-md-4 col-lg-3 d-flex align-items-end">
+                          <button className="btn btn-primary fw-bold w-100" onClick={handleGuardarCambios}>
+                            <i className="bi bi-save2-fill me-2" />Guardar cambios
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Agregar al inventario */}
+                      <div className="border-top pt-3">
+                        <p className="text-muted fw-bold small mb-2 text-uppercase">
+                          <i className="bi bi-box-arrow-in-down me-1" />Agregar al inventario
+                        </p>
+                        <ProductosPanel
+                          productoSeleccionado={productoSeleccionado}
+                          cantidadAgregar={cantidadAgregar}
+                          setCantidadAgregar={setCantidadAgregar}
+                          precioCompraAgregar={precioCompraAgregar}
+                          setPrecioCompraAgregar={setPrecioCompraAgregar}
+                          limpiarSeleccion={limpiarSeleccion}
+                          setProductoSeleccionado={setProductoSeleccionado}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            </div>
+              )}
 
-            <div className="col-lg-8">
-              <ProductoSearchProductos
-                productosFiltrados={productosFiltrados}
-                busquedaProducto={busquedaProducto}
-                setBusquedaProducto={setBusquedaProducto}
-                productoSeleccionado={productoSeleccionado}
-                seleccionarProducto={seleccionarProducto}
-                codigoEscaneado={codigoEscaneado}
-                inputBusquedaRef={inputBusquedaRef}
-              />
-
-              <ProductosPanel
-                productoSeleccionado={productoSeleccionado}
-                cantidadAgregar={cantidadAgregar}
-                setCantidadAgregar={setCantidadAgregar}
-                precioCompraAgregar={precioCompraAgregar}
-                setPrecioCompraAgregar={setPrecioCompraAgregar}
-                descripcionEdit={descripcionEdit}
-                setDescripcionEdit={setDescripcionEdit}
-                precioEdit={precioEdit}
-                setPrecioEdit={setPrecioEdit}
-                precioCompraEdit={precioCompraEdit}
-                setPrecioCompraEdit={setPrecioCompraEdit}
-                activoEdit={activoEdit}
-                setActivoEdit={setActivoEdit}
-                codigoEdit={codigoEdit}
-                setCodigoEdit={setCodigoEdit}
-                limpiarSeleccion={limpiarSeleccion}
-                queryClient={queryClient}
-                productos={productos}
-              />
             </div>
           </div>
         </div>

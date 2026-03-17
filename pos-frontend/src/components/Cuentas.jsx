@@ -6,6 +6,11 @@ import DataTable from './common/DataTable';
 import { imprimirRecibo } from './ReciboAbono';
 import { useTasaCambio } from '../context/TasaCambioContext';
 
+const ETIQUETA_PAGO = {
+  PESOS:   { label: '🇲🇽 Pesos',   color: 'primary' },
+  DOLARES: { label: '🇺🇸 Dólares', color: 'success' },
+  TARJETA: { label: '💳 Tarjeta',  color: 'info' },
+};
 
 export default function Cuentas() {
   const [busqueda, setBusqueda] = useState('');
@@ -19,16 +24,11 @@ export default function Cuentas() {
   const [nuevoCliente, setNuevoCliente] = useState({ nombre: '', descripcion: '' });
   const [clienteEditando, setClienteEditando] = useState({ nombre: '', descripcion: '' });
   const { tasaCambio } = useTasaCambio();
-  // Estados para modo de pago del abono
   const [modoPagoAbono, setModoPagoAbono] = useState('PESOS');
   const [abonoEnDolares, setAbonoEnDolares] = useState('');
 
-
   const queryClient = useQueryClient();
 
-
-
-  // ✅ MUTACIÓN NUEVA CUENTA
   const nuevaCuentaMutation = useMutation({
     mutationFn: (cliente) => axios.post('/api/cuentas', cliente),
     onSuccess: () => {
@@ -42,8 +42,6 @@ export default function Cuentas() {
     },
   });
 
-
-  // ✅ MUTACIÓN EDITAR CUENTA
   const editarCuentaMutation = useMutation({
     mutationFn: ({ id, cliente }) => axios.put(`/api/cuentas/${id}`, cliente),
     onSuccess: (data, variables) => {
@@ -60,8 +58,6 @@ export default function Cuentas() {
     },
   });
 
-
-  // Resumen cuentas - ✅ PROTEGIDO
   const { data: cuentasResumen = [], isLoading, error } = useQuery({
     queryKey: ['cuentas-resumen'],
     queryFn: async () => {
@@ -70,8 +66,6 @@ export default function Cuentas() {
     },
   });
 
-
-  // Detalle cuenta expandida - ✅ PROTEGIDO
   const { data: detalleCuenta, isLoading: loadingDetalle } = useQuery({
     queryKey: ['cuenta-detalle', cuentaExpandida?.id],
     enabled: !!cuentaExpandida?.id,
@@ -86,8 +80,6 @@ export default function Cuentas() {
     },
   });
 
-
-  // DETALLE DE VENTA (productos) - ✅ PROTEGIDO
   const { data: detalleVenta, isLoading: loadingVenta } = useQuery({
     queryKey: ['venta-detalle', ventaSeleccionada?.ventaId],
     enabled: !!ventaSeleccionada?.ventaId,
@@ -97,17 +89,15 @@ export default function Cuentas() {
     },
   });
 
-
-  // ✅ MUTACIÓN ABONO CON IMPRESIÓN
   const abonoMutation = useMutation({
-    mutationFn: (monto) => axios.post(`/api/cuentas/${cuentaExpandida.id}/abonar?monto=${monto}`),
+    mutationFn: (monto) =>
+      axios.post(`/api/cuentas/${cuentaExpandida.id}/abonar?monto=${monto}&tipoPago=${modoPagoAbono}`),
     onSuccess: (response) => {
       const abonoCreado = response.data;
       queryClient.invalidateQueries({ queryKey: ['cuentas-resumen'] });
       queryClient.invalidateQueries({ queryKey: ['cuenta-detalle', cuentaExpandida?.id] });
       setMontoAbono('');
-
-      // ✅ PREGUNTAR SI IMPRIMIR
+      setAbonoEnDolares('');
       if (window.confirm('✅ Abono registrado correctamente.\n\n¿Desea imprimir el recibo?')) {
         imprimirRecibo(abonoCreado, cuentaExpandida, modoPagoAbono);
       }
@@ -117,17 +107,10 @@ export default function Cuentas() {
     },
   });
 
-
-  // ✅ FILTRADO PROTEGIDO
   const datosFiltrados = useMemo(() => {
     if (!Array.isArray(cuentasResumen)) return [];
-
     let filtrados = cuentasResumen;
-
-    if (soloDeudores) {
-      filtrados = filtrados.filter(c => (c?.saldo || 0) > 0);
-    }
-
+    if (soloDeudores) filtrados = filtrados.filter(c => (c?.saldo || 0) > 0);
     const texto = busqueda.toLowerCase().trim();
     if (texto) {
       filtrados = filtrados.filter(c =>
@@ -135,12 +118,9 @@ export default function Cuentas() {
         (c?.descripcion || '').toLowerCase().includes(texto)
       );
     }
-
     return filtrados;
   }, [cuentasResumen, busqueda, soloDeudores]);
 
-
-  // KPIs SIMPLIFICADOS - ✅ PROTEGIDO
   const totals = useMemo(() => ({
     clientes: datosFiltrados?.length || 0,
     saldoTotal: Array.isArray(datosFiltrados)
@@ -148,21 +128,16 @@ export default function Cuentas() {
       : 0,
   }), [datosFiltrados]);
 
-
   const handleAbono = () => {
     const monto = parseFloat(montoAbono);
     if (isNaN(monto) || monto <= 0) return alert('Monto inválido');
-    if (monto > (cuentaExpandida?.saldo || 0)) return alert('Monto supera el saldo');
+    if (modoPagoAbono !== 'TARJETA' && monto > (cuentaExpandida?.saldo || 0))
+      return alert('Monto supera el saldo');
     abonoMutation.mutate(monto);
   };
 
-
-  // HANDLER NUEVA CUENTA
   const handleCrearCliente = () => {
-    if (!nuevoCliente.nombre.trim()) {
-      alert('El nombre es obligatorio');
-      return;
-    }
+    if (!nuevoCliente.nombre.trim()) { alert('El nombre es obligatorio'); return; }
     nuevaCuentaMutation.mutate({
       nombre: nuevoCliente.nombre.trim(),
       descripcion: nuevoCliente.descripcion.trim() || null,
@@ -170,26 +145,16 @@ export default function Cuentas() {
     });
   };
 
-
-  // ✅ HANDLER EDITAR CUENTA - PROTEGIDO
   const handleEditarCliente = (cliente) => {
     if (!cliente) return;
-    setClienteEditando({
-      nombre: cliente.nombre || '',
-      descripcion: cliente.descripcion || ''
-    });
+    setClienteEditando({ nombre: cliente.nombre || '', descripcion: cliente.descripcion || '' });
     setEditandoCliente(cliente.id);
   };
 
-
   const handleGuardarEdicion = () => {
-    if (!clienteEditando.nombre.trim()) {
-      alert('El nombre es obligatorio');
-      return;
-    }
+    if (!clienteEditando.nombre.trim()) { alert('El nombre es obligatorio'); return; }
     const cuentaOriginal = Array.isArray(cuentasResumen)
-      ? cuentasResumen.find(c => c?.id === editandoCliente)
-      : null;
+      ? cuentasResumen.find(c => c?.id === editandoCliente) : null;
     editarCuentaMutation.mutate({
       id: editandoCliente,
       cliente: {
@@ -200,14 +165,11 @@ export default function Cuentas() {
     });
   };
 
-
   const handleCancelarEdicion = () => {
     setEditandoCliente(null);
     setClienteEditando({ nombre: '', descripcion: '' });
   };
 
-
-  // ✅ Transformar productos del JSON - PROTEGIDO
   const productosTabla = useMemo(() => {
     if (!Array.isArray(detalleVenta) || detalleVenta.length === 0) return [];
     return detalleVenta.map(item => ({
@@ -221,15 +183,13 @@ export default function Cuentas() {
     }));
   }, [detalleVenta]);
 
-
   if (isLoading) return <div className="fs-6 text-center py-5">Cargando...</div>;
   if (error) return <div className="text-danger fs-6 text-center py-5">Error: {error.message}</div>;
-
 
   return (
     <div className="d-flex justify-content-center">
       <div className="card shadow-sm fs-6 w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '0.25rem 0' }}>
-        {/* ✅ HEADER ULTRA COMPACTO Y MÁS ARRIBA */}
+
         <div className="card-header p-2 bg-primary text-white border-bottom-0 d-flex justify-content-between align-items-center" style={{ minHeight: '48px' }}>
           <div className="d-flex align-items-center h-100">
             <h6 className="mb-0 me-2" style={{ fontSize: '0.95rem', lineHeight: 1.1 }}>💰 Cuentas Cobrar</h6>
@@ -247,57 +207,31 @@ export default function Cuentas() {
           </button>
         </div>
 
-
-        {/* ✅ FORMULARIO NUEVO CLIENTE */}
         {mostrarNuevoCliente && (
           <div className="card-header bg-success-subtle border-bottom py-3">
             <div className="row g-3 align-items-end">
               <div className="col-lg-4 col-md-5">
                 <label className="form-label fw-semibold mb-1 small">Nombre *</label>
-                <input
-                  type="text"
-                  className="form-control form-control-lg"
-                  placeholder="Juan Pérez"
+                <input type="text" className="form-control form-control-lg" placeholder="Juan Pérez"
                   value={nuevoCliente.nombre}
-                  onChange={(e) => setNuevoCliente({ ...nuevoCliente, nombre: e.target.value })}
-                  autoFocus
-                />
+                  onChange={(e) => setNuevoCliente({ ...nuevoCliente, nombre: e.target.value })} autoFocus />
               </div>
               <div className="col-lg-5 col-md-4">
                 <label className="form-label fw-semibold mb-1 small">Descripción</label>
-                <input
-                  type="text"
-                  className="form-control form-control-lg"
-                  placeholder="Teléfono, notas..."
+                <input type="text" className="form-control form-control-lg" placeholder="Teléfono, notas..."
                   value={nuevoCliente.descripcion}
-                  onChange={(e) => setNuevoCliente({ ...nuevoCliente, descripcion: e.target.value })}
-                />
+                  onChange={(e) => setNuevoCliente({ ...nuevoCliente, descripcion: e.target.value })} />
               </div>
               <div className="col-lg-3 col-md-3">
                 <div className="d-grid gap-2 h-100">
-                  <button
-                    className="btn btn-success h-100 fw-bold shadow-sm"
-                    onClick={handleCrearCliente}
-                    disabled={nuevaCuentaMutation.isPending || !nuevoCliente.nombre.trim()}
-                  >
-                    {nuevaCuentaMutation.isPending ? (
-                      <>
-                        <span className="spinner-border spinner-border-sm me-2" />
-                        Creando...
-                      </>
-                    ) : (
-                      <>
-                        <i className="bi bi-check-circle-fill me-1" />Crear
-                      </>
-                    )}
+                  <button className="btn btn-success h-100 fw-bold shadow-sm" onClick={handleCrearCliente}
+                    disabled={nuevaCuentaMutation.isPending || !nuevoCliente.nombre.trim()}>
+                    {nuevaCuentaMutation.isPending
+                      ? <><span className="spinner-border spinner-border-sm me-2" />Creando...</>
+                      : <><i className="bi bi-check-circle-fill me-1" />Crear</>}
                   </button>
-                  <button
-                    className="btn btn-outline-secondary btn-sm"
-                    onClick={() => {
-                      setMostrarNuevoCliente(false);
-                      setNuevoCliente({ nombre: '', descripcion: '' });
-                    }}
-                  >
+                  <button className="btn btn-outline-secondary btn-sm"
+                    onClick={() => { setMostrarNuevoCliente(false); setNuevoCliente({ nombre: '', descripcion: '' }); }}>
                     <i className="bi bi-x" />Cancelar
                   </button>
                 </div>
@@ -309,9 +243,7 @@ export default function Cuentas() {
           </div>
         )}
 
-
         <div className="card-body py-3">
-          {/* KPIs */}
           <div className="row g-3 mb-4">
             <div className="col-md-6">
               <div className="border rounded p-3">
@@ -329,27 +261,16 @@ export default function Cuentas() {
             </div>
           </div>
 
-
-          {/* FILTROS */}
           <div className="border rounded p-3 mb-4 bg-body-tertiary">
             <div className="row g-3 align-items-end">
               <div className="col-md-5">
                 <label className="form-label mb-1 small fw-semibold">🔍 Buscar</label>
-                <input
-                  type="text"
-                  className="form-control form-control-lg"
-                  placeholder="Nombre o descripción..."
-                  value={busqueda}
-                  onChange={(e) => setBusqueda(e.target.value)}
-                />
+                <input type="text" className="form-control form-control-lg" placeholder="Nombre o descripción..."
+                  value={busqueda} onChange={(e) => setBusqueda(e.target.value)} />
               </div>
               <div className="col-md-4">
                 <label className="form-label mb-1 small fw-semibold">Filas</label>
-                <select
-                  className="form-select"
-                  value={pageSize}
-                  onChange={(e) => setPageSize(parseInt(e.target.value))}
-                >
+                <select className="form-select" value={pageSize} onChange={(e) => setPageSize(parseInt(e.target.value))}>
                   <option value={10}>10</option>
                   <option value={20}>20</option>
                   <option value={50}>50</option>
@@ -357,19 +278,11 @@ export default function Cuentas() {
                 </select>
               </div>
               <div className="col-md-3 d-flex align-items-end">
-                <button
-                  className={`btn w-100 py-2 ${soloDeudores ? 'btn-danger' : 'btn-outline-danger'}`}
-                  onClick={() => setSoloDeudores(!soloDeudores)}
-                >
-                  {soloDeudores ? (
-                    <>
-                      <i className="bi bi-people-fill me-1" />Todos
-                    </>
-                  ) : (
-                    <>
-                      <i className="bi bi-exclamation-triangle-fill me-1" />Deudores
-                    </>
-                  )}
+                <button className={`btn w-100 py-2 ${soloDeudores ? 'btn-danger' : 'btn-outline-danger'}`}
+                  onClick={() => setSoloDeudores(!soloDeudores)}>
+                  {soloDeudores
+                    ? <><i className="bi bi-people-fill me-1" />Todos</>
+                    : <><i className="bi bi-exclamation-triangle-fill me-1" />Deudores</>}
                 </button>
               </div>
             </div>
@@ -380,8 +293,6 @@ export default function Cuentas() {
             )}
           </div>
 
-
-          {/* ✅ MENSAJE SI NO HAY DATOS */}
           {(!Array.isArray(datosFiltrados) || datosFiltrados.length === 0) ? (
             <div className="alert alert-info text-center py-5">
               <i className="bi bi-inbox fs-1 d-block mb-3" />
@@ -393,165 +304,97 @@ export default function Cuentas() {
               </p>
             </div>
           ) : (
-            <>
-              {/* ✅ TABLA CON EDICIÓN INLINE Y BOTONES VERTICALES */}
-              <div className="card mb-4 shadow-sm">
-                <div className="card-header py-2 d-flex justify-content-between align-items-center">
-                  <h6 className="mb-0">
-                    <i className="bi bi-list-ul me-2" />Resumen Cliente
-                    <span className="badge bg-secondary ms-2">{datosFiltrados.length}</span>
-                  </h6>
-                </div>
-                <div className="card-body p-0" style={{ maxHeight: '400px', overflow: 'auto' }}>
-                  <DataTable
-                    columns={[
-                      {
-                        id: 'nombre',
-                        header: 'Cliente',
-                        sortable: true,
-                        filterable: true,
-                        render: (c) => (
-                          <div style={{ minHeight: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                            {editandoCliente === c?.id ? (
-                              <div className="d-flex flex-column gap-1">
-                                <input
-                                  type="text"
-                                  className="form-control form-control-sm"
-                                  style={{ height: '24px', fontSize: '0.8rem' }}
-                                  placeholder="Nombre *"
-                                  value={clienteEditando.nombre}
-                                  onChange={(e) => setClienteEditando({ ...clienteEditando, nombre: e.target.value })}
-                                  autoFocus
-                                />
-                                <input
-                                  type="text"
-                                  className="form-control form-control-sm"
-                                  style={{ height: '22px', fontSize: '0.8rem' }}
-                                  placeholder="Descripción"
-                                  value={clienteEditando.descripcion}
-                                  onChange={(e) => setClienteEditando({ ...clienteEditando, descripcion: e.target.value })}
-                                />
-                              </div>
-                            ) : (
-                              <>
-                                <div className="fw-semibold" style={{ fontSize: '0.9rem' }}>{c?.nombre || 'Sin nombre'}</div>
-                                {c?.descripcion && <small className="">{c.descripcion}</small>}
-                              </>
-                            )}
-                          </div>
-                        )
-                      },
-                      {
-                        id: 'totalVentas',
-                        header: 'Ventas',
-                        width: 80,
-                        align: 'center',
-                        sortable: true,
-                        render: (c) => c?.totalVentas || 0
-                      },
-                      {
-                        id: 'totalFacturado',
-                        header: 'Vendido 💵',
-                        width: 130,
-                        align: 'right',
-                        sortable: true,
-                        render: (c) => <div className="fw-semibold text-success">{formatMoney(c?.totalFacturado || 0)}</div>
-                      },
-                      {
-                        id: 'totalPagado',
-                        header: 'Pagado 💳',
-                        width: 130,
-                        align: 'right',
-                        sortable: true,
-                        render: (c) => <div className="fw-semibold text-primary">{formatMoney(c?.totalPagado || 0)}</div>
-                      },
-                      {
-                        id: 'saldo',
-                        header: 'Saldo ⚖️',
-                        width: 130,
-                        align: 'right',
-                        sortable: true,
-                        render: (c) => (
-                          <div className={`fw-bold fs-6 ${(c?.saldo || 0) > 0 ? 'text-danger' : 'text-success'}`}>
-                            {formatMoney(c?.saldo || 0)}
-                          </div>
-                        )
-                      },
-                      {
-                        id: 'acciones',
-                        header: 'Acciones',
-                        width: 110,
-                        align: 'center',
-                        render: (c) => (
-                          <div className="d-flex flex-column gap-1 h-100 justify-content-center p-1">
-                            {editandoCliente === c?.id ? (
-                              <>
-                                <button
-                                  className="btn btn-success btn-sm flex-fill py-1"
-                                  style={{ minHeight: '28px', fontSize: '0.75rem' }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleGuardarEdicion();
-                                  }}
-                                  disabled={editarCuentaMutation.isPending || !clienteEditando.nombre.trim()}
-                                  title="Guardar cambios"
-                                >
-                                  {editarCuentaMutation.isPending ? (
-                                    <span className="spinner-border spinner-border-sm me-1" />
-                                  ) : (
-                                    <i className="bi bi-check-lg me-1" />
-                                  )}
-                                  Guardar
-                                </button>
-                                <button
-                                  className="btn btn-secondary btn-sm flex-fill py-1"
-                                  style={{ minHeight: '28px', fontSize: '0.75rem' }}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleCancelarEdicion();
-                                  }}
-                                  title="Cancelar"
-                                >
-                                  <i className="bi bi-x me-1" />
-                                  Cancelar
-                                </button>
-                              </>
-                            ) : (
-                              <button
-                                className="btn btn-outline-primary btn-sm w-100 py-1"
-                                style={{ minHeight: '32px', fontSize: '0.8rem' }}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleEditarCliente(c);
-                                }}
-                                title="Editar cliente"
-                              >
-                                <i className="bi bi-pencil me-1" />
-                                Editar
-                              </button>
-                            )}
-                          </div>
-                        )
-                      }
-                    ]}
-                    data={datosFiltrados}
-                    initialSort={{ id: 'saldo', direction: 'desc' }}
-                    pageSize={pageSize}
-                    getRowKey={(c) => c?.id || 0}
-                    onRowClick={(c) => {
-                      if (editandoCliente !== c?.id) {
-                        setCuentaExpandida(cuentaExpandida?.id === c?.id ? null : c);
-                      }
-                    }}
-                    selectedRowKey={cuentaExpandida?.id}
-                  />
-                </div>
+            <div className="card mb-4 shadow-sm">
+              <div className="card-header py-2 d-flex justify-content-between align-items-center">
+                <h6 className="mb-0">
+                  <i className="bi bi-list-ul me-2" />Resumen Cliente
+                  <span className="badge bg-secondary ms-2">{datosFiltrados.length}</span>
+                </h6>
               </div>
-            </>
+              <div className="card-body p-0" style={{ maxHeight: '400px', overflow: 'auto' }}>
+                <DataTable
+                  columns={[
+                    {
+                      id: 'nombre', header: 'Cliente', sortable: true, filterable: true,
+                      render: (c) => (
+                        <div style={{ minHeight: '60px', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                          {editandoCliente === c?.id ? (
+                            <div className="d-flex flex-column gap-1">
+                              <input type="text" className="form-control form-control-sm"
+                                style={{ height: '24px', fontSize: '0.8rem' }} placeholder="Nombre *"
+                                value={clienteEditando.nombre}
+                                onChange={(e) => setClienteEditando({ ...clienteEditando, nombre: e.target.value })} autoFocus />
+                              <input type="text" className="form-control form-control-sm"
+                                style={{ height: '22px', fontSize: '0.8rem' }} placeholder="Descripción"
+                                value={clienteEditando.descripcion}
+                                onChange={(e) => setClienteEditando({ ...clienteEditando, descripcion: e.target.value })} />
+                            </div>
+                          ) : (
+                            <>
+                              <div className="fw-semibold" style={{ fontSize: '0.9rem' }}>{c?.nombre || 'Sin nombre'}</div>
+                              {c?.descripcion && <small>{c.descripcion}</small>}
+                            </>
+                          )}
+                        </div>
+                      )
+                    },
+                    { id: 'totalVentas', header: 'Ventas', width: 80, align: 'center', sortable: true, render: (c) => c?.totalVentas || 0 },
+                    { id: 'totalFacturado', header: 'Vendido 💵', width: 130, align: 'right', sortable: true,
+                      render: (c) => <div className="fw-semibold text-success">{formatMoney(c?.totalFacturado || 0)}</div> },
+                    { id: 'totalPagado', header: 'Pagado 💳', width: 130, align: 'right', sortable: true,
+                      render: (c) => <div className="fw-semibold text-primary">{formatMoney(c?.totalPagado || 0)}</div> },
+                    { id: 'saldo', header: 'Saldo ⚖️', width: 130, align: 'right', sortable: true,
+                      render: (c) => (
+                        <div className={`fw-bold fs-6 ${(c?.saldo || 0) > 0 ? 'text-danger' : 'text-success'}`}>
+                          {formatMoney(c?.saldo || 0)}
+                        </div>
+                      ) },
+                    {
+                      id: 'acciones', header: 'Acciones', width: 110, align: 'center',
+                      render: (c) => (
+                        <div className="d-flex flex-column gap-1 h-100 justify-content-center p-1">
+                          {editandoCliente === c?.id ? (
+                            <>
+                              <button className="btn btn-success btn-sm flex-fill py-1"
+                                style={{ minHeight: '28px', fontSize: '0.75rem' }}
+                                onClick={(e) => { e.stopPropagation(); handleGuardarEdicion(); }}
+                                disabled={editarCuentaMutation.isPending || !clienteEditando.nombre.trim()}>
+                                {editarCuentaMutation.isPending
+                                  ? <span className="spinner-border spinner-border-sm me-1" />
+                                  : <i className="bi bi-check-lg me-1" />}Guardar
+                              </button>
+                              <button className="btn btn-secondary btn-sm flex-fill py-1"
+                                style={{ minHeight: '28px', fontSize: '0.75rem' }}
+                                onClick={(e) => { e.stopPropagation(); handleCancelarEdicion(); }}>
+                                <i className="bi bi-x me-1" />Cancelar
+                              </button>
+                            </>
+                          ) : (
+                            <button className="btn btn-outline-primary btn-sm w-100 py-1"
+                              style={{ minHeight: '32px', fontSize: '0.8rem' }}
+                              onClick={(e) => { e.stopPropagation(); handleEditarCliente(c); }}>
+                              <i className="bi bi-pencil me-1" />Editar
+                            </button>
+                          )}
+                        </div>
+                      )
+                    }
+                  ]}
+                  data={datosFiltrados}
+                  initialSort={{ id: 'saldo', direction: 'desc' }}
+                  pageSize={pageSize}
+                  getRowKey={(c) => c?.id || 0}
+                  onRowClick={(c) => {
+                    if (editandoCliente !== c?.id) {
+                      setCuentaExpandida(cuentaExpandida?.id === c?.id ? null : c);
+                    }
+                  }}
+                  selectedRowKey={cuentaExpandida?.id}
+                />
+              </div>
+            </div>
           )}
 
-
-          {/* Detalle Cuenta - ✅ PROTEGIDO */}
           {cuentaExpandida && (
             <div className="card mt-4 shadow-sm">
               <div className="card-header d-flex justify-content-between align-items-center">
@@ -562,7 +405,7 @@ export default function Cuentas() {
                   </span>
                 </h6>
                 <button className="btn btn-sm btn-outline-secondary" onClick={() => setCuentaExpandida(null)}>
-                  <i className="bi bi-x-circle" />Cerrar
+                  <i className="bi bi-x-circle" /> Cerrar
                 </button>
               </div>
 
@@ -574,20 +417,16 @@ export default function Cuentas() {
                   </div>
                 ) : detalleCuenta ? (
                   <>
-                    {/* Form Abono */}
                     {(cuentaExpandida.saldo || 0) > 0 && (
                       <div className="p-4 bg-warning bg-opacity-10 border-bottom">
                         <h6 className="mb-3">
                           <i className="bi bi-cash-coin text-warning me-2" />Nuevo Abono
                         </h6>
 
-                        {/* Selector modo pago abono */}
+                        {/* Selector modo pago — PESOS / DÓLARES / TARJETA */}
                         <div className="mb-3">
                           <div className="btn-group w-100" role="group">
-                            {[
-                              { key: 'PESOS', label: '🇲🇽 Pesos', color: 'primary' },
-                              { key: 'DOLARES', label: '🇺🇸 Dólares', color: 'success' },
-                            ].map(({ key, label, color }) => (
+                            {Object.entries(ETIQUETA_PAGO).map(([key, { label, color }]) => (
                               <button key={key} type="button"
                                 className={`btn btn-sm ${modoPagoAbono === key ? `btn-${color} text-white` : `btn-outline-${color}`}`}
                                 onClick={() => { setModoPagoAbono(key); setMontoAbono(''); setAbonoEnDolares(''); }}>
@@ -595,38 +434,32 @@ export default function Cuentas() {
                               </button>
                             ))}
                           </div>
-                          <small className="text-muted" style={{ fontSize: '0.7rem' }}>
-                            Tasa actual: $1 USD = ${tasaCambio} MXN
-                          </small>
+                          {modoPagoAbono !== 'TARJETA' && (
+                            <small className="text-muted" style={{ fontSize: '0.7rem' }}>
+                              Tasa actual: $1 USD = ${tasaCambio} MXN
+                            </small>
+                          )}
                         </div>
 
                         <div className="row g-3">
                           <div className="col-md-5">
-                            {modoPagoAbono === 'PESOS' ? (
-                              <input
-                                type="number"
-                                className="form-control form-control-lg"
-                                placeholder="0.00"
-                                step="0.01" min="0.01"
-                                max={cuentaExpandida.saldo || 0}
+                            {modoPagoAbono === 'PESOS' || modoPagoAbono === 'TARJETA' ? (
+                              <input type="number" className="form-control form-control-lg"
+                                placeholder="0.00" step="0.01" min="0.01"
+                                max={modoPagoAbono === 'TARJETA' ? undefined : (cuentaExpandida.saldo || 0)}
                                 value={montoAbono}
-                                onChange={(e) => setMontoAbono(e.target.value)}
-                              />
+                                onChange={(e) => setMontoAbono(e.target.value)} />
                             ) : (
                               <>
                                 <div className="input-group">
                                   <span className="input-group-text bg-success text-white">USD</span>
-                                  <input
-                                    type="number"
-                                    className="form-control form-control-lg"
-                                    placeholder="0.00"
-                                    step="0.01" min="0.01"
+                                  <input type="number" className="form-control form-control-lg"
+                                    placeholder="0.00" step="0.01" min="0.01"
                                     value={abonoEnDolares}
                                     onChange={(e) => {
                                       setAbonoEnDolares(e.target.value);
                                       setMontoAbono(String((Number(e.target.value) * tasaCambio).toFixed(2)));
-                                    }}
-                                  />
+                                    }} />
                                 </div>
                                 {abonoEnDolares > 0 && (
                                   <small className="text-muted d-block mt-1">
@@ -638,35 +471,33 @@ export default function Cuentas() {
                           </div>
                           <div className="col-md-4">
                             <small className="text-muted">
-                              Máx: {formatMoney(cuentaExpandida.saldo || 0)}
+                              {modoPagoAbono !== 'TARJETA' && <>Máx: {formatMoney(cuentaExpandida.saldo || 0)}</>}
                               {montoAbono && modoPagoAbono === 'DOLARES' && (
                                 <span className="d-block text-success fw-bold">
                                   Abono: {formatMoney(Number(montoAbono))} MXN
                                 </span>
                               )}
+                              {modoPagoAbono === 'TARJETA' && (
+                                <span className="d-block text-info fw-bold">
+                                  <i className="bi bi-credit-card me-1" />Pago con tarjeta
+                                </span>
+                              )}
                             </small>
                           </div>
                           <div className="col-md-3">
-                            <button
-                              className="btn btn-warning w-100 h-100 py-3 fw-bold"
+                            <button className="btn btn-warning w-100 h-100 py-3 fw-bold"
                               onClick={handleAbono}
-                              disabled={!montoAbono || abonoMutation.isPending}
-                            >
-                              {abonoMutation.isPending ? (
-                                <><span className="spinner-border spinner-border-sm me-2" />Registrando...</>
-                              ) : (
-                                <><i className="bi bi-check-circle-fill me-2" />Abono</>
-                              )}
+                              disabled={!montoAbono || abonoMutation.isPending}>
+                              {abonoMutation.isPending
+                                ? <><span className="spinner-border spinner-border-sm me-2" />Registrando...</>
+                                : <><i className="bi bi-check-circle-fill me-2" />Abono</>}
                             </button>
                           </div>
                         </div>
                       </div>
                     )}
 
-
-
                     <div className="p-4">
-                      {/* ✅ ABONOS CON BOTÓN IMPRIMIR - PROTEGIDO */}
                       {Array.isArray(detalleCuenta?.ultimosAbonos) && detalleCuenta.ultimosAbonos.length > 0 ? (
                         <div className="mb-4">
                           <div className="d-flex justify-content-between align-items-center mb-3">
@@ -682,28 +513,37 @@ export default function Cuentas() {
                                   <th>Monto</th>
                                   <th>Antes</th>
                                   <th>Después</th>
+                                  <th>Tipo pago</th>
                                   <th>Fecha</th>
                                   <th width="80">🖨️</th>
                                 </tr>
                               </thead>
                               <tbody>
-                                {detalleCuenta.ultimosAbonos.slice(0, pageSize).map(abono => (
-                                  <tr key={abono?.id || Math.random()}>
-                                    <td className="fw-bold text-success">{formatMoney(abono?.cantidad || 0)}</td>
-                                    <td>{formatMoney(abono?.viejoSaldo || 0)}</td>
-                                    <td className="fw-bold text-primary">{formatMoney(abono?.nuevoSaldo || 0)}</td>
-                                    <td><small className="text-muted">{formatFecha(abono?.fecha)}</small></td>
-                                    <td>
-                                      <button
-                                        className="btn btn-sm btn-outline-primary"
-                                        onClick={() => imprimirRecibo(abono, cuentaExpandida, abono.tipoPago || 'PESOS')}
-                                        title="Reimprimir recibo"
-                                      >
-                                        <i className="bi bi-printer-fill" />
-                                      </button>
-                                    </td>
-                                  </tr>
-                                ))}
+                                {detalleCuenta.ultimosAbonos.slice(0, pageSize).map(abono => {
+                                  const tp = abono?.tipoPago || 'PESOS';
+                                  const meta = ETIQUETA_PAGO[tp] || { label: tp, color: 'secondary' };
+                                  return (
+                                    <tr key={abono?.id || Math.random()}>
+                                      <td className="fw-bold text-success">{formatMoney(abono?.cantidad || 0)}</td>
+                                      <td>{formatMoney(abono?.viejoSaldo || 0)}</td>
+                                      <td className="fw-bold text-primary">{formatMoney(abono?.nuevoSaldo || 0)}</td>
+                                      <td>
+                                        <span className={`badge bg-${meta.color}-subtle text-${meta.color}-emphasis border border-${meta.color}-subtle`}
+                                          style={{ fontSize: '0.72rem' }}>
+                                          {meta.label}
+                                        </span>
+                                      </td>
+                                      <td><small className="text-muted">{formatFecha(abono?.fecha)}</small></td>
+                                      <td>
+                                        <button className="btn btn-sm btn-outline-primary"
+                                          onClick={() => imprimirRecibo(abono, cuentaExpandida, tp)}
+                                          title="Reimprimir recibo">
+                                          <i className="bi bi-printer-fill" />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
                               </tbody>
                             </table>
                           </div>
@@ -714,8 +554,6 @@ export default function Cuentas() {
                         </div>
                       )}
 
-
-                      {/* Ventas - ✅ PROTEGIDO */}
                       {Array.isArray(detalleCuenta?.ultimasVentas) && detalleCuenta.ultimasVentas.length > 0 ? (
                         <div>
                           <div className="d-flex justify-content-between align-items-center mb-3">
@@ -730,26 +568,24 @@ export default function Cuentas() {
                                 <tr>
                                   <th>#</th>
                                   <th>Total</th>
-                                  <th>Status</th>
+                                  <th>Estado</th>
                                   <th>Fecha</th>
                                 </tr>
                               </thead>
                               <tbody>
                                 {detalleCuenta.ultimasVentas.slice(0, pageSize).map(venta => (
-                                  <tr
-                                    key={venta?.id || Math.random()}
+                                  <tr key={venta?.id || Math.random()}
                                     className={ventaSeleccionada?.id === venta?.id ? 'table-active' : ''}
                                     style={{ cursor: 'pointer' }}
-                                    onClick={() => setVentaSeleccionada(ventaSeleccionada?.id === venta?.id ? null : venta)}
-                                  >
+                                    onClick={() => setVentaSeleccionada(ventaSeleccionada?.id === venta?.id ? null : venta)}>
                                     <td className="fw-semibold">#{venta?.ventaId || 'N/A'}</td>
                                     <td className="text-end fw-bold text-success">{formatMoney(venta?.totalVenta || 0)}</td>
                                     <td>
-                                      <span className={`badge fs-6 px-2 py-1 fw-semibold ${venta?.status === 'COMPLETADA' ? 'bg-success' :
-                                        venta?.status === 'PRESTAMO' ? 'bg-warning text-dark' :
-                                          'bg-secondary'
-                                        }`}>
-                                        {venta?.status || 'N/A'}
+                                      <span className={`badge fs-6 px-2 py-1 fw-semibold ${
+                                        venta?.status === 'COMPLETADA' ? 'bg-success' :
+                                        venta?.status === 'PRESTAMO' ? 'bg-warning text-dark' : 'bg-secondary'
+                                      }`}>
+                                        {venta?.status === 'PRESTAMO' ? 'Préstamo' : venta?.status === 'COMPLETADA' ? 'Contado' : venta?.status || 'N/A'}
                                       </span>
                                     </td>
                                     <td><small className="text-muted">{formatFecha(venta?.fecha)}</small></td>
@@ -767,16 +603,12 @@ export default function Cuentas() {
                     </div>
                   </>
                 ) : (
-                  <div className="p-4 text-center text-muted">
-                    No se pudo cargar el detalle
-                  </div>
+                  <div className="p-4 text-center text-muted">No se pudo cargar el detalle</div>
                 )}
               </div>
             </div>
           )}
 
-
-          {/* DETALLE PRODUCTOS - ✅ PROTEGIDO */}
           {ventaSeleccionada && (
             <div className="card mt-4 shadow-sm">
               <div className="card-header d-flex justify-content-between align-items-center">
@@ -784,18 +616,14 @@ export default function Cuentas() {
                   📦 Productos #{ventaSeleccionada.ventaId || 'N/A'}
                   <span className="badge bg-success ms-2 fs-6">{formatMoney(ventaSeleccionada.totalVenta || 0)}</span>
                 </h6>
-                <button
-                  className="btn btn-sm btn-outline-secondary"
-                  onClick={() => setVentaSeleccionada(null)}
-                >
-                  <i className="bi bi-x-circle" />Cerrar
+                <button className="btn btn-sm btn-outline-secondary" onClick={() => setVentaSeleccionada(null)}>
+                  <i className="bi bi-x-circle" /> Cerrar
                 </button>
               </div>
               <div className="card-body p-0">
                 {loadingVenta ? (
                   <div className="p-4 text-center">
-                    <div className="spinner-border spinner-border-sm me-2" role="status" />
-                    Cargando productos...
+                    <div className="spinner-border spinner-border-sm me-2" role="status" />Cargando productos...
                   </div>
                 ) : productosTabla.length > 0 ? (
                   <div className="table-responsive" style={{ maxHeight: '400px', overflow: 'auto' }}>
@@ -816,40 +644,29 @@ export default function Cuentas() {
                             <td className="pe-2">{producto?.nombre || 'N/A'}</td>
                             <td className="text-center fw-bold">{producto?.cantidad || 0}</td>
                             <td className="text-end small">{formatMoney(producto?.precioUnitario || 0)}</td>
-                            <td className="text-end fw-bold text-success fs-6">
-                              {formatMoney(producto?.subtotal || 0)}
-                            </td>
+                            <td className="text-end fw-bold text-success fs-6">{formatMoney(producto?.subtotal || 0)}</td>
                           </tr>
                         ))}
                         <tr className="table-group-divider">
                           <td colSpan={4} className="text-end fw-bold fs-5 text-primary">TOTAL:</td>
-                          <td className="text-end fs-4 fw-bold text-success">
-                            {formatMoney(ventaSeleccionada.totalVenta || 0)}
-                          </td>
+                          <td className="text-end fs-4 fw-bold text-success">{formatMoney(ventaSeleccionada.totalVenta || 0)}</td>
                         </tr>
                       </tbody>
                     </table>
                   </div>
                 ) : (
                   <div className="p-4 text-center text-muted">
-                    <i className="bi bi-inbox fs-2 d-block mb-2" />
-                    No hay productos en esta venta
+                    <i className="bi bi-inbox fs-2 d-block mb-2" />No hay productos en esta venta
                   </div>
                 )}
               </div>
             </div>
           )}
 
-
-          {/* Footer */}
           <div className="card-footer bg-body-tertiary py-3 text-center text-muted small">
             <div className="row">
-              <div className="col-md-6">
-                Total sistema: {Array.isArray(cuentasResumen) ? cuentasResumen.length : 0}
-              </div>
-              <div className="col-md-6 text-md-end">
-                {new Date().toLocaleTimeString()}
-              </div>
+              <div className="col-md-6">Total sistema: {Array.isArray(cuentasResumen) ? cuentasResumen.length : 0}</div>
+              <div className="col-md-6 text-md-end">{new Date().toLocaleTimeString()}</div>
             </div>
           </div>
         </div>

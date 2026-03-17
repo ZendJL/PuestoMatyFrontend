@@ -1,24 +1,24 @@
 export default function MermaTabla({
-  itemsMerma = [], 
-  formatMoney, 
-  cambiarCantidadItem, 
-  quitarItem, 
-  pageSize = 10, 
-  setPageSize 
+  itemsMerma,
+  cambiarCantidadItem,
+  quitarItem,
+  pageSize,
+  setPageSize,
+  formatMoney,
 }) {
-  const itemsSeguros = Array.isArray(itemsMerma) ? itemsMerma : [];
+  const items = Array.isArray(itemsMerma) ? itemsMerma : [];
 
   return (
     <div className="card shadow-sm mb-3">
       <div className="card-header d-flex justify-content-between align-items-center bg-body-tertiary border-bottom">
         <h6 className="mb-0 fw-semibold">
-          🛒 Productos en merma <span className="badge bg-primary">{itemsSeguros.length}</span>
+          📋 Items <span className="badge bg-danger">{items.length}</span>
         </h6>
-        <select 
-          className="form-select form-select-sm" 
-          style={{width: '90px'}} 
-          value={pageSize} 
-          onChange={e => setPageSize?.(parseInt(e.target.value))}
+        <select
+          className="form-select form-select-sm"
+          style={{ width: '90px' }}
+          value={pageSize}
+          onChange={(e) => setPageSize(parseInt(e.target.value))}
         >
           <option value={10}>10</option>
           <option value={20}>20</option>
@@ -30,58 +30,66 @@ export default function MermaTabla({
           <table className="table table-hover table-sm mb-0">
             <thead className="table-light sticky-top bg-body-tertiary">
               <tr>
-                <th style={{width: '50%'}}>Producto</th>
-                <th className="text-center" style={{width: '15%'}}>Cant.</th>
-                <th className="text-center" style={{width: '15%'}}>Inv.</th>
-                <th style={{width: '20%'}} className="text-center">
-                  <small>Eliminar</small>
-                </th>
+                <th style={{ width: '45%' }}>Producto</th>
+                <th className="text-center" style={{ width: '15%' }}>Cant.</th>
+                <th className="text-center" style={{ width: '15%' }}>Stock</th>
+                <th style={{ width: '15%' }} className="text-center"><small>Eliminar</small></th>
               </tr>
             </thead>
             <tbody className="table-group-divider">
-              {itemsSeguros.slice(0, pageSize).map((item) => {
-                const inventario = item?.inventario ?? 0;
-                const cantidad = item?.cantidad || 0;
+              {items.slice(0, pageSize).map((item) => {
+                if (!item) return null;
+                const rawVal = item.cantidadRaw !== undefined ? item.cantidadRaw : String(item.cantidad);
+                const excede = (item.cantidad || 0) >= (item.inventario ?? 0);
                 return (
-                  <tr key={item?.id || Math.random()} className="align-middle">
+                  <tr key={item.id} className="align-middle">
                     <td>
-                      <div className="fw-semibold">{item?.descripcion || 'Sin nombre'}</div>
-                      <small className="text-body-secondary">#{item?.codigo || 'N/A'}</small>
+                      <div className="fw-semibold">{item.descripcion || 'Sin nombre'}</div>
+                      <small className="text-body-secondary">#{item.codigo || 'N/A'}</small>
                     </td>
                     <td className="text-center">
                       <input
                         type="number"
-                        className="form-control form-control-sm text-center w-75 mx-auto"
-                        min="1"
-                        max={inventario}
-                        value={cantidad}
-                        onChange={(e) => cambiarCantidadItem?.(item?.id, parseInt(e.target.value) || 1)}
+                        min="0"
+                        max={item.inventario}
+                        value={rawVal}
+                        onChange={(e) => cambiarCantidadItem(item.id, e.target.value)}
+                        onBlur={(e) => {
+                          if (e.target.value === '' || e.target.value === '0') {
+                            cambiarCantidadItem(item.id, '1');
+                          }
+                        }}
+                        className={`form-control form-control-sm text-center w-75 mx-auto ${
+                          excede ? 'border-warning' : ''
+                        }`}
                       />
+                      {excede && (
+                        <div className="text-warning" style={{ fontSize: '0.65rem', lineHeight: 1 }}>
+                          máx {item.inventario}
+                        </div>
+                      )}
                     </td>
-                    <td className="text-center fw-medium">{inventario}</td>
+                    <td className="text-center">
+                      <span className="badge bg-secondary">{item.inventario ?? 0}</span>
+                    </td>
                     <td className="p-0">
                       <div className="d-flex justify-content-center align-items-center h-100">
                         <span
                           className="rounded-circle shadow-sm"
                           style={{
-                            width: '48px', height: '48px',
-                            backgroundColor: '#dc3545', color: '#ffffff',
-                            fontSize: '1.6rem', fontWeight: 'bold',
-                            cursor: 'pointer', border: '3px solid #ffffff',
-                            boxShadow: '0 4px 12px rgba(220, 53, 69, 0.4)',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            transition: 'all 0.2s ease'
+                            width: '40px',
+                            height: '40px',
+                            backgroundColor: '#dc3545',
+                            color: '#ffffff',
+                            fontSize: '1.4rem',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
                           }}
-                          onClick={() => quitarItem?.(item?.id)}
+                          onClick={() => quitarItem(item.id)}
                           title="Eliminar"
-                          onMouseEnter={(e) => {
-                            e.target.style.transform = 'scale(1.1)';
-                            e.target.style.boxShadow = '0 6px 16px rgba(220, 53, 69, 0.6)';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.target.style.transform = 'scale(1)';
-                            e.target.style.boxShadow = '0 4px 12px rgba(220, 53, 69, 0.4)';
-                          }}
                         >
                           ×
                         </span>
@@ -90,12 +98,12 @@ export default function MermaTabla({
                   </tr>
                 );
               })}
-              {itemsSeguros.length === 0 && (
+              {items.length === 0 && (
                 <tr>
                   <td colSpan={4} className="text-center text-body-secondary py-5">
-                    <i className="bi bi-cart-x fs-1 mb-3 d-block opacity-50"/>
-                    <div className="fs-5 fw-semibold mb-2">Sin productos</div>
-                    <small className="opacity-75">Busca y agrega productos</small>
+                    <i className="bi bi-inbox fs-1 mb-3 d-block opacity-50" />
+                    <div className="fs-5 fw-semibold mb-2">Lista vacía</div>
+                    <small className="opacity-75">Busca o escanea un producto</small>
                   </td>
                 </tr>
               )}

@@ -24,7 +24,6 @@ export default function Venta() {
   const [pagoCliente, setPagoCliente] = useState('');
   const [pageSize, setPageSize] = useState(10);
 
-  // Nuevos estados para pago en dólares
   const { tasaCambio } = useTasaCambio();
   const [modoPago, setModoPago] = useState('PESOS');
   const [pagoDolares, setPagoDolares] = useState('');
@@ -148,7 +147,7 @@ export default function Venta() {
 
     const enCarrito = venta.find((i) => i.id === producto.id)?.cantidad ?? 0;
     if (enCarrito + 1 > stock) {
-      alert(`❌ Máximo ${stock} unidades de "${producto.descripcion}"`);
+      // No alert: simplemente no agregar más
       return;
     }
 
@@ -168,15 +167,20 @@ export default function Venta() {
   }, []);
 
   const cambiarCantidad = useCallback((id, nuevaCantidadRaw) => {
-    let nuevaCantidad = Number(nuevaCantidadRaw);
-    if (Number.isNaN(nuevaCantidad) || nuevaCantidad < 1) nuevaCantidad = 1;
+    // Permitir campo vacío o cero mientras el usuario edita
+    if (nuevaCantidadRaw === '' || nuevaCantidadRaw === '0') {
+      setVenta((prev) => prev.map((item) =>
+        item.id === id ? { ...item, cantidadRaw: nuevaCantidadRaw, cantidad: item.cantidad } : item
+      ));
+      return;
+    }
+    const nuevaCantidad = parseInt(nuevaCantidadRaw, 10);
+    if (Number.isNaN(nuevaCantidad) || nuevaCantidad < 1) return;
     setVenta((prev) => prev.map((item) => {
       if (item.id !== id) return item;
-      if (nuevaCantidad > (item.stock ?? 0)) {
-        alert(`No puedes vender más de ${item.stock} unidades`);
-        return { ...item, cantidad: item.stock };
-      }
-      return { ...item, cantidad: nuevaCantidad };
+      // Clampear al stock sin alert
+      const cantidadFinal = Math.min(nuevaCantidad, item.stock ?? 0);
+      return { ...item, cantidad: cantidadFinal, cantidadRaw: String(cantidadFinal) };
     }));
   }, []);
 
@@ -214,14 +218,13 @@ export default function Venta() {
   total,
   status: modoPrestamo ? 'PRESTAMO' : 'COMPLETADA',
   pagoCliente: modoPrestamo ? null : pagoTotalMXN,
-  tipoPago: modoPrestamo ? 'CREDITO' : modoPago,  // ← línea nueva
+  tipoPago: modoPrestamo ? 'CREDITO' : modoPago,
   ventaProductos: venta.map(item => ({
     producto: { id: item.id, descripcion: item.descripcion },
     cantidad: item.cantidad,
     precioUnitario: item.precio,
   })),
 };
-
 
       const respuesta = await axios.post('/api/ventas', ventaData);
       const ventaGuardada = respuesta.data;

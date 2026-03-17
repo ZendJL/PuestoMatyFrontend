@@ -28,17 +28,19 @@ export default function VentaTabla({
           <table className="table table-hover table-sm mb-0">
             <thead className="table-light sticky-top bg-body-tertiary">
               <tr>
-                <th style={{ width: '42%' }}>Producto</th>
-                <th className="text-end" style={{ width: '13%' }}>Precio</th>
-                <th className="text-center" style={{ width: '12%' }}>Cant.</th>
-                <th className="text-end" style={{ width: '13%' }}>Subtotal</th>
+                <th style={{ width: '35%' }}>Producto</th>
+                <th className="text-end" style={{ width: '11%' }}>Precio</th>
+                <th className="text-center" style={{ width: '11%' }}>Cant.</th>
+                <th className="text-center" style={{ width: '11%' }}>Inventario</th>
+                <th className="text-end" style={{ width: '12%' }}>Subtotal</th>
                 <th className="text-center" style={{ width: '20%' }}><small>Eliminar</small></th>
               </tr>
             </thead>
             <tbody className="table-group-divider">
               {carrito.slice(0, pageSize).map((item) => {
                 const rawVal = item.cantidadRaw !== undefined ? item.cantidadRaw : String(item.cantidad);
-                const excede = item.cantidad >= (item.stock ?? 0);
+                const stock = item.stock ?? 0;
+                const excede = item.cantidad >= stock;
                 return (
                   <tr key={item.id} className="align-middle">
                     <td>
@@ -50,7 +52,7 @@ export default function VentaTabla({
                       <input
                         type="number"
                         min="0"
-                        max={item.stock}
+                        max={stock}
                         value={rawVal}
                         onChange={(e) => cambiarCantidad(item.id, e.target.value)}
                         onBlur={(e) => {
@@ -62,11 +64,15 @@ export default function VentaTabla({
                           excede ? ' border-warning' : ''
                         }`}
                       />
-                      {excede && (
-                        <div className="text-warning" style={{ fontSize: '0.65rem', lineHeight: 1 }}>
-                          máx {item.stock}
-                        </div>
-                      )}
+                    </td>
+                    <td className="text-center">
+                      <span className={`fw-semibold ${
+                        stock === 0 ? 'text-danger' :
+                        excede ? 'text-warning' :
+                        'text-success'
+                      }`}>
+                        {stock}
+                      </span>
                     </td>
                     <td className="text-end fw-semibold text-success">
                       {formatMoney(item.precio * item.cantidad)}
@@ -87,7 +93,7 @@ export default function VentaTabla({
               })}
               {carrito.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="text-center text-body-secondary py-5">
+                  <td colSpan={6} className="text-center text-body-secondary py-5">
                     <i className="bi bi-cart-x fs-1 mb-3 d-block opacity-50" />
                     <div className="fs-5 fw-semibold mb-2">Carrito vacío</div>
                     <small className="opacity-75">Busca o escanea un producto</small>

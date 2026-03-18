@@ -8,7 +8,6 @@ import VentaTabla from './VentaTabla';
 import ModoPago from './ModoPago';
 import CuentaPrestamo from './CuentaPrestamo';
 import CobroContado from './CobroContado';
-import ResumenVenta from './ResumenVenta';
 import { useTasaCambio } from '../../context/TasaCambioContext';
 
 const DENOMINACIONES = [20, 30, 40, 50, 100, 150, 200, 250, 500, 1000];
@@ -29,7 +28,7 @@ export default function Venta() {
   const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null);
   const [busquedaCuenta, setBusquedaCuenta] = useState('');
   const [pagoCliente, setPagoCliente] = useState('');
-  const [pageSize, setPageSize] = useState(10);
+  const [pageSize] = useState(20);
   const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
@@ -68,7 +67,6 @@ export default function Venta() {
         if (escaneando) { bufferEscaner.current = ''; escaneando = false; setCodigoEscaneado(''); clearTimeout(timerEscaner); }
         return;
       }
-
       if (e.key === 'Enter') {
         if (bufferEscaner.current.length > 0) {
           e.preventDefault(); e.stopPropagation();
@@ -80,14 +78,11 @@ export default function Venta() {
         }
         return;
       }
-
       if (!/^[0-9]$/.test(e.key)) return;
       e.preventDefault(); e.stopPropagation();
-
       if (!escaneando) { escaneando = true; bufferEscaner.current = ''; setCodigoEscaneado(''); }
       bufferEscaner.current += e.key;
       setCodigoEscaneado(bufferEscaner.current);
-
       clearTimeout(timerEscaner);
       timerEscaner = setTimeout(() => { bufferEscaner.current = ''; escaneando = false; setCodigoEscaneado(''); }, 300);
     };
@@ -125,13 +120,8 @@ export default function Venta() {
   const agregarAlCarrito = useCallback((producto) => {
     const stock = producto.cantidad ?? 0;
     if (stock <= 0) { alert('❌ Sin inventario disponible'); return; }
-
     const enCarrito = venta.find((i) => i.id === producto.id)?.cantidad ?? 0;
-    if (enCarrito + 1 > stock) {
-      // No alert: simplemente no agregar más
-      return;
-    }
-
+    if (enCarrito + 1 > stock) return;
     setVenta((prev) => {
       const existe = prev.find((i) => i.id === producto.id);
       if (existe) return prev.map((i) => i.id === producto.id ? { ...i, cantidad: i.cantidad + 1 } : i);
@@ -143,7 +133,6 @@ export default function Venta() {
   const quitarDelCarrito = useCallback((id) => setVenta(prev => prev.filter(item => item.id !== id)), []);
 
   const cambiarCantidad = useCallback((id, nuevaCantidadRaw) => {
-    // Permitir campo vacío o cero mientras el usuario edita
     if (nuevaCantidadRaw === '' || nuevaCantidadRaw === '0') {
       setVenta((prev) => prev.map((item) =>
         item.id === id ? { ...item, cantidadRaw: nuevaCantidadRaw, cantidad: item.cantidad } : item
@@ -154,7 +143,6 @@ export default function Venta() {
     if (Number.isNaN(nuevaCantidad) || nuevaCantidad < 1) return;
     setVenta((prev) => prev.map((item) => {
       if (item.id !== id) return item;
-      // Clampear al stock sin alert
       const cantidadFinal = Math.min(nuevaCantidad, item.stock ?? 0);
       return { ...item, cantidad: cantidadFinal, cantidadRaw: String(cantidadFinal) };
     }));
@@ -179,39 +167,32 @@ export default function Venta() {
     return true;
   };
 
-  const handleCobrar = () => {
-    if (!validarVenta()) return;
-    setMostrarConfirmacion(true);
-  };
+  const handleCobrar = () => { if (!validarVenta()) return; setMostrarConfirmacion(true); };
 
   const confirmarVenta = async () => {
     setGuardando(true);
     try {
       const ventaData = {
-  fecha: new Date().toISOString(),
-  cuentaId: modoPrestamo ? cuentaSeleccionada.id : null,
-  total,
-  status: modoPrestamo ? 'PRESTAMO' : 'COMPLETADA',
-  pagoCliente: modoPrestamo ? null : pagoTotalMXN,
-  tipoPago: modoPrestamo ? 'CREDITO' : modoPago,
-  ventaProductos: venta.map(item => ({
-    producto: { id: item.id, descripcion: item.descripcion },
-    cantidad: item.cantidad,
-    precioUnitario: item.precio,
-  })),
-};
-
+        fecha: new Date().toISOString(),
+        cuentaId: modoPrestamo ? cuentaSeleccionada.id : null,
+        total,
+        status: modoPrestamo ? 'PRESTAMO' : 'COMPLETADA',
+        pagoCliente: modoPrestamo ? null : pagoTotalMXN,
+        tipoPago: modoPrestamo ? 'CREDITO' : modoPago,
+        ventaProductos: venta.map(item => ({
+          producto: { id: item.id, descripcion: item.descripcion },
+          cantidad: item.cantidad,
+          precioUnitario: item.precio,
+        })),
+      };
       const respuesta = await axios.post('/api/ventas', ventaData);
       const ventaGuardada = respuesta.data;
-
       setMostrarConfirmacion(false);
-
       if (window.confirm('¿Imprimir ticket?')) {
         imprimirTicketVenta(ventaGuardada.id, {
           infoPago: { modoPago, tasaCambio, pagoDolares, pagoMixtoPesos, pagoMixtoDolares }
         });
       }
-
       limpiarVenta();
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['productos-pos'] }),
@@ -225,53 +206,52 @@ export default function Venta() {
     }
   };
 
-  if (isLoading) return <div className="fs-6 text-center py-5">Cargando productos...</div>;
-  if (error) return <div className="text-danger fs-6 text-center py-5">Error: {error.message}</div>;
+  if (isLoading) return <div className="fs-4 text-center py-5">Cargando productos...</div>;
+  if (error) return <div className="text-danger fs-4 text-center py-5">Error: {error.message}</div>;
 
   return (
     <>
-      {/* ===== MODAL DE CONFIRMACIÓN ===== */}
+      {/* MODAL CONFIRMACIÓN */}
       {mostrarConfirmacion && (
         <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} tabIndex="-1">
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content shadow-lg border-0">
               <div className={`modal-header text-white ${modoPrestamo ? 'bg-warning' : 'bg-success'}`}>
-                <h5 className="modal-title fw-bold">
+                <h4 className="modal-title fw-bold">
                   {modoPrestamo ? '📋 Confirmar Fiado' : '✅ Confirmar Cobro'}
-                </h5>
+                </h4>
               </div>
               <div className="modal-body p-4">
                 <div className="text-center mb-4">
-                  <div className="text-muted mb-1">Total a cobrar</div>
-                  <div className="display-5 fw-bold text-success">{formatMoney(total)}</div>
+                  <div className="text-muted mb-1 fs-5">Total a cobrar</div>
+                  <div className="display-4 fw-bold text-success">{formatMoney(total)}</div>
                 </div>
-
                 <div className="list-group list-group-flush mb-3">
-                  <div className="list-group-item d-flex justify-content-between px-0">
-                    <span className="text-muted">Productos</span>
-                    <span className="fw-semibold">{venta.length} artículo{venta.length !== 1 ? 's' : ''}</span>
+                  <div className="list-group-item d-flex justify-content-between px-0 py-3">
+                    <span className="text-muted fs-5">Productos</span>
+                    <span className="fw-semibold fs-5">{venta.length} artículo{venta.length !== 1 ? 's' : ''}</span>
                   </div>
                   {modoPrestamo ? (
-                    <div className="list-group-item d-flex justify-content-between px-0">
-                      <span className="text-muted">Cliente (fiado)</span>
-                      <span className="fw-semibold text-warning">{cuentaSeleccionada?.nombre}</span>
+                    <div className="list-group-item d-flex justify-content-between px-0 py-3">
+                      <span className="text-muted fs-5">Cliente (fiado)</span>
+                      <span className="fw-semibold fs-5 text-warning">{cuentaSeleccionada?.nombre}</span>
                     </div>
                   ) : (
                     <>
-                      <div className="list-group-item d-flex justify-content-between px-0">
-                        <span className="text-muted">Forma de pago</span>
-                        <span className="fw-semibold">{ETIQUETA_MODO_PAGO[modoPago] || modoPago}</span>
+                      <div className="list-group-item d-flex justify-content-between px-0 py-3">
+                        <span className="text-muted fs-5">Forma de pago</span>
+                        <span className="fw-semibold fs-5">{ETIQUETA_MODO_PAGO[modoPago] || modoPago}</span>
                       </div>
                       {modoPago !== 'TARJETA' && (
-                        <div className="list-group-item d-flex justify-content-between px-0">
-                          <span className="text-muted">Pago recibido</span>
-                          <span className="fw-semibold">{formatMoney(pagoTotalMXN)}</span>
+                        <div className="list-group-item d-flex justify-content-between px-0 py-3">
+                          <span className="text-muted fs-5">Pago recibido</span>
+                          <span className="fw-semibold fs-5">{formatMoney(pagoTotalMXN)}</span>
                         </div>
                       )}
                       {modoPago !== 'TARJETA' && cambio > 0 && (
-                        <div className="list-group-item d-flex justify-content-between px-0 bg-success-subtle rounded">
-                          <span className="fw-bold text-success">💵 Cambio</span>
-                          <span className="fw-bold fs-5 text-success">{formatMoney(cambio)}</span>
+                        <div className="list-group-item d-flex justify-content-between px-0 py-2 bg-success-subtle rounded">
+                          <span className="fw-bold text-success fs-5">💵 Cambio</span>
+                          <span className="fw-bold fs-3 text-success">{formatMoney(cambio)}</span>
                         </div>
                       )}
                     </>
@@ -279,17 +259,12 @@ export default function Venta() {
                 </div>
               </div>
               <div className="modal-footer border-0 pt-0 gap-2">
-                <button
-                  className="btn btn-outline-secondary btn-lg flex-fill"
-                  onClick={() => setMostrarConfirmacion(false)}
-                  disabled={guardando}
-                >
+                <button className="btn btn-outline-secondary btn-lg flex-fill" onClick={() => setMostrarConfirmacion(false)} disabled={guardando}>
                   ✏️ Corregir
                 </button>
                 <button
                   className={`btn btn-lg flex-fill fw-bold text-white ${modoPrestamo ? 'btn-warning' : 'btn-success'}`}
-                  onClick={confirmarVenta}
-                  disabled={guardando}
+                  onClick={confirmarVenta} disabled={guardando}
                 >
                   {guardando
                     ? <><span className="spinner-border spinner-border-sm me-2" />Guardando...</>
@@ -301,117 +276,152 @@ export default function Venta() {
         </div>
       )}
 
-      {/* ===== PANTALLA PRINCIPAL ===== */}
-      <div className="d-flex justify-content-center">
-        <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '0.25rem 0' }}>
-          <div className="card-header p-2 bg-primary text-white border-bottom-0" style={{ minHeight: '48px' }}>
-            <div className="row align-items-center g-0 h-100">
-              <div className="col-md-8">
-                <div className="d-flex align-items-center h-100">
-                  <h6 className="mb-0 me-2" style={{ fontSize: '0.95rem', lineHeight: 1.1 }}>🛒 Punto de Venta</h6>
-                  <small className="opacity-75" style={{ fontSize: '0.7rem' }}>
-                    {venta.length} prod{codigoEscaneado.length > 0 && ' | 🔢'}
-                  </small>
+      {/* LAYOUT PRINCIPAL — altura fija sin scroll */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        height: 'calc(100vh - 60px)',  /* 60px = altura navbar */
+        overflow: 'hidden',
+        padding: '8px 12px',
+        gap: '8px',
+      }}>
+
+        {/* HEADER COMPACTO */}
+        <div
+          className="rounded px-3 py-2 text-white d-flex align-items-center justify-content-between flex-shrink-0"
+          style={{ background: 'linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%)', minHeight: '52px' }}
+        >
+          <div className="d-flex align-items-center gap-3">
+            <span style={{ fontSize: '1.4rem', lineHeight: 1 }}>🛒</span>
+            <div>
+              <div className="fw-bold" style={{ fontSize: '1.1rem', lineHeight: 1 }}>Punto de Venta</div>
+              <div className="opacity-75" style={{ fontSize: '0.8rem' }}>
+                {venta.length} producto{venta.length !== 1 ? 's' : ''} en carrito
+                {codigoEscaneado && <span className="ms-2 badge bg-warning text-dark">🔢 Escaneando...</span>}
+              </div>
+            </div>
+          </div>
+          <div className="text-end">
+            <div className="fw-bold text-warning" style={{ fontSize: '2rem', lineHeight: 1 }}>{formatMoney(total)}</div>
+            <div className="opacity-75" style={{ fontSize: '0.75rem' }}>{modoPrestamo ? 'Por cobrar (fiado)' : 'Total'}</div>
+          </div>
+        </div>
+
+        {/* CUERPO — dos columnas */}
+        <div style={{ display: 'flex', gap: '10px', flex: 1, minHeight: 0 }}>
+
+          {/* COLUMNA IZQUIERDA — búsqueda + carrito */}
+          <div style={{ flex: '1 1 60%', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
+
+            {/* BÚSQUEDA */}
+            <ProductoSearch
+              busquedaCodigo={busquedaCodigo}
+              setBusquedaCodigo={setBusquedaCodigo}
+              busquedaNombre={busquedaNombre}
+              setBusquedaNombre={setBusquedaNombre}
+              productosFiltrados={productosFiltrados}
+              manejarSeleccionProducto={agregarAlCarrito}
+              formatMoney={formatMoney}
+              codigoEscaneado={codigoEscaneado}
+              productos={productos}
+            />
+
+            {/* CARRITO — ocupa el resto */}
+            <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+              <VentaTabla
+                carrito={venta}
+                formatMoney={formatMoney}
+                cambiarCantidad={cambiarCantidad}
+                quitarDelCarrito={quitarDelCarrito}
+                pageSize={pageSize}
+              />
+            </div>
+          </div>
+
+          {/* COLUMNA DERECHA — modo pago + cobro + botón */}
+          <div style={{
+            flex: '0 0 340px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '8px',
+            minHeight: 0,
+            overflowY: 'auto',
+          }}>
+            <ModoPago modoPrestamo={modoPrestamo} setModoPrestamo={setModoPrestamo} />
+
+            {modoPrestamo ? (
+              <CuentaPrestamo
+                cuentas={cuentas}
+                cuentaSeleccionada={cuentaSeleccionada}
+                setCuentaSeleccionada={setCuentaSeleccionada}
+                busquedaCuenta={busquedaCuenta}
+                setBusquedaCuenta={setBusquedaCuenta}
+                formatMoney={formatMoney}
+                cuentaData={cuentaSeleccionadaData}
+              />
+            ) : (
+              <CobroContado
+                pagoCliente={pagoCliente}
+                setPagoCliente={setPagoCliente}
+                cambio={cambio}
+                formatMoney={formatMoney}
+                DENOMINACIONES={DENOMINACIONES}
+                aplicarDenominacion={aplicarDenominacion}
+                total={total}
+                modoPago={modoPago}
+                setModoPago={setModoPago}
+                pagoDolares={pagoDolares}
+                setPagoDolares={setPagoDolares}
+                pagoMixtoPesos={pagoMixtoPesos}
+                setPayoMixtoPesos={setPayoMixtoPesos}
+                pagoMixtoDolares={pagoMixtoDolares}
+                setPagoMixtoDolares={setPagoMixtoDolares}
+              />
+            )}
+
+            {/* TOTAL + BOTONES */}
+            <div className="mt-auto" style={{ flexShrink: 0 }}>
+              {/* Total grande */}
+              <div
+                className={`rounded p-3 mb-2 text-center ${modoPrestamo ? 'bg-warning-subtle border border-warning' : 'bg-success-subtle border border-success'}`}
+              >
+                <div className={`fw-bold mb-1 ${modoPrestamo ? 'text-warning' : 'text-success'}`} style={{ fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: 1 }}>
+                  {modoPrestamo ? '📋 Total Fiado' : '💵 Total a Cobrar'}
+                </div>
+                <div className={`fw-bold ${modoPrestamo ? 'text-warning' : 'text-success'}`} style={{ fontSize: '2.6rem', lineHeight: 1 }}>
+                  {formatMoney(total)}
+                </div>
+                {!modoPrestamo && cambio > 0 && (
+                  <div className="mt-2 text-success fw-semibold" style={{ fontSize: '1.1rem' }}>
+                    💵 Cambio: {formatMoney(cambio)}
+                  </div>
+                )}
+                <div className="text-muted mt-1" style={{ fontSize: '0.8rem' }}>
+                  {venta.length} artículo{venta.length !== 1 ? 's' : ''}
                 </div>
               </div>
-              <div className="col-md-4 text-end">
-                <div className="fw-bold text-warning" style={{ fontSize: '1.4rem', lineHeight: 1.1 }}>{formatMoney(total)}</div>
-                <small className="opacity-75" style={{ fontSize: '0.65rem' }}>{modoPrestamo ? 'Por cobrar' : 'Total'}</small>
-              </div>
-            </div>
-          </div>
 
-          <div className="card-body py-3">
-            <div className="row g-3">
-              <div className="col-lg-8">
-                <ProductoSearch
-                  busquedaCodigo={busquedaCodigo}
-                  setBusquedaCodigo={setBusquedaCodigo}
-                  busquedaNombre={busquedaNombre}
-                  setBusquedaNombre={setBusquedaNombre}
-                  productosFiltrados={productosFiltrados}
-                  manejarSeleccionProducto={agregarAlCarrito}
-                  formatMoney={formatMoney}
-                  codigoEscaneado={codigoEscaneado}
-                  productos={productos}
-                />
-                <VentaTabla
-                  carrito={venta}
-                  formatMoney={formatMoney}
-                  cambiarCantidad={cambiarCantidad}
-                  quitarDelCarrito={quitarDelCarrito}
-                  pageSize={pageSize}
-                  setPageSize={setPageSize}
-                />
-              </div>
-
-              <div className="col-lg-4">
-                {/* Fix: sin wrapper div con onClick duplicado */}
-                <ModoPago modoPrestamo={modoPrestamo} setModoPrestamo={setModoPrestamo} />
-
-                {modoPrestamo ? (
-                  <CuentaPrestamo
-                    cuentas={cuentas}
-                    cuentaSeleccionada={cuentaSeleccionada}
-                    setCuentaSeleccionada={setCuentaSeleccionada}
-                    busquedaCuenta={busquedaCuenta}
-                    setBusquedaCuenta={setBusquedaCuenta}
-                    formatMoney={formatMoney}
-                    cuentaData={cuentaSeleccionadaData}
-                  />
-                ) : (
-                  <CobroContado
-                    pagoCliente={pagoCliente}
-                    setPagoCliente={setPagoCliente}
-                    cambio={cambio}
-                    formatMoney={formatMoney}
-                    DENOMINACIONES={DENOMINACIONES}
-                    aplicarDenominacion={aplicarDenominacion}
-                    total={total}
-                    modoPago={modoPago}
-                    setModoPago={setModoPago}
-                    pagoDolares={pagoDolares}
-                    setPagoDolares={setPagoDolares}
-                    pagoMixtoPesos={pagoMixtoPesos}
-                    setPayoMixtoPesos={setPayoMixtoPesos}
-                    pagoMixtoDolares={pagoMixtoDolares}
-                    setPagoMixtoDolares={setPagoMixtoDolares}
-                  />
-                )}
-
-                <ResumenVenta
-                  carrito={venta}
-                  total={total}
-                  pagoTotalMXN={pagoTotalMXN}
-                  cambio={cambio}
-                  modoPrestamo={modoPrestamo}
-                  modoPago={modoPago}
-                  formatMoney={formatMoney}
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="card-footer bg-body-tertiary py-3 border-top">
-            <div className="row g-2">
-              <div className="col-md-6">
-                <button className="btn btn-outline-secondary w-100 h-100" onClick={limpiarVenta}>
-                  <i className="bi bi-arrow-repeat me-2" />Limpiar Todo
-                </button>
-              </div>
-              <div className="col-md-6">
+              {/* Botones acción */}
+              <div className="d-flex gap-2">
                 <button
-                  className={`btn w-100 h-100 fs-5 fw-bold text-white shadow-sm ${
+                  className="btn btn-outline-secondary fw-semibold"
+                  style={{ height: '52px', minWidth: '90px', fontSize: '0.9rem' }}
+                  onClick={limpiarVenta}
+                >
+                  <i className="bi bi-arrow-repeat me-1" />Limpiar
+                </button>
+                <button
+                  className={`btn fw-bold flex-fill text-white ${
                     venta.length === 0 || (modoPrestamo && !cuentaSeleccionada)
                       ? 'btn-secondary'
                       : modoPrestamo ? 'btn-warning' : 'btn-success'
                   }`}
+                  style={{ height: '52px', fontSize: '1.2rem' }}
                   onClick={handleCobrar}
                   disabled={venta.length === 0 || (modoPrestamo && !cuentaSeleccionada)}
                 >
-                  <i className={`bi me-2 fs-4 ${modoPrestamo ? 'bi-person-check-fill' : 'bi-check-circle-fill'}`} />
-                  {modoPrestamo ? 'Registrar Fiado' : 'Cobrar Venta'}
-                  <div className="small mt-1 opacity-90">{formatMoney(total)}</div>
+                  <i className={`bi me-2 ${modoPrestamo ? 'bi-person-check-fill' : 'bi-check-circle-fill'}`} />
+                  {modoPrestamo ? 'Fiado' : 'Cobrar'}
                 </button>
               </div>
             </div>

@@ -27,3 +27,66 @@
 .hover-scale:hover {
   transform: scale(1.02);
 }
+
+/* ── Inputs con diseño consistente ──────────────────────── */
+.form-control,
+.form-select {
+  border: 1.5px solid #ced4da;
+  border-radius: 0.4rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  background-color: #fff;
+}
+.form-control:focus,
+.form-select:focus {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.18);
+  background-color: #fff;
+}
+.form-control::placeholder {
+  color: #adb5bd;
+  font-style: italic;
+}
+.input-group-text {
+  border: 1.5px solid #ced4da;
+  background-color: #f0f4fa;
+  color: #495057;
+  font-weight: 600;
+}
+.input-group .form-control:focus {
+  z-index: 3;
+}
+
+/* ── Tabs con indicador visual claro ────────────────────── */
+.nav-tabs .nav-link {
+  border: none;
+  border-bottom: 3px solid transparent;
+  border-radius: 0;
+  padding: 0.5rem 1.2rem;
+  color: #6c757d;
+  font-weight: 500;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+.nav-tabs .nav-link:hover:not(.active) {
+  color: #0d6efd;
+  background-color: rgba(13, 110, 253, 0.06);
+  border-bottom-color: rgba(13, 110, 253, 0.3);
+}
+.nav-tabs .nav-link.active {
+  color: #0d6efd !important;
+  background-color: rgba(13, 110, 253, 0.08) !important;
+  border-bottom: 3px solid #0d6efd !important;
+  border-left: none;
+  border-top: none;
+  border-right: none;
+  font-weight: 700;
+}
+.nav-tabs .nav-link.active.text-success {
+  color: #198754 !important;
+  border-bottom-color: #198754 !important;
+  background-color: rgba(25, 135, 84, 0.08) !important;
+}
+.nav-tabs .nav-link.active.text-primary {
+  color: #0d6efd !important;
+  border-bottom-color: #0d6efd !important;
+  background-color: rgba(13, 110, 253, 0.08) !important;
+}

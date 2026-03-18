@@ -34,10 +34,17 @@ function getInicioFinPeriodo(tipo) {
 }
 
 const ETIQUETA_PAGO = {
-  PESOS: '🇲🇽 Efectivo (Pesos)',
+  PESOS: '🇲🇽 Efectivo',
   TARJETA: '💳 Tarjeta',
   DOLARES: '🇺🇸 Dólares',
   MIXTO: '🔀 Mixto',
+};
+
+const BADGE_PAGO = {
+  PESOS: 'bg-success-subtle text-success-emphasis border border-success-subtle',
+  TARJETA: 'bg-primary-subtle text-primary-emphasis border border-primary-subtle',
+  DOLARES: 'bg-info-subtle text-info-emphasis border border-info-subtle',
+  MIXTO: 'bg-secondary-subtle text-secondary-emphasis border border-secondary-subtle',
 };
 
 export default function ReporteVentasGenerales() {
@@ -153,7 +160,7 @@ export default function ReporteVentasGenerales() {
     {
       id: 'cuenta',
       header: 'Cuenta',
-      style: { width: 140 },
+      style: { width: 130 },
       accessor: (v) =>
         v.status === 'PRESTAMO'
           ? (v.cuenta?.nombre ?? `Cuenta ${v.cuentaId ?? ''}`) || 'Préstamo'
@@ -162,6 +169,25 @@ export default function ReporteVentasGenerales() {
       filterable: true,
       filterPlaceholder: 'Cuenta / tipo',
       cellClassName: 'small',
+    },
+    {
+      id: 'tipoPago',
+      header: 'Tipo pago',
+      style: { width: 120 },
+      accessor: (v) => v.tipoPago ?? '',
+      sortable: true,
+      filterable: true,
+      filterPlaceholder: 'PESOS...',
+      headerAlign: 'center',
+      cellClassName: 'text-center',
+      render: (v) =>
+        v.tipoPago ? (
+          <span className={`badge ${BADGE_PAGO[v.tipoPago] ?? 'bg-secondary-subtle text-secondary-emphasis'}`}>
+            {ETIQUETA_PAGO[v.tipoPago] ?? v.tipoPago}
+          </span>
+        ) : (
+          <span className="text-muted small">—</span>
+        ),
     },
     {
       id: 'total',
@@ -357,12 +383,20 @@ export default function ReporteVentasGenerales() {
                           <div className="col-6 text-end">
                             <strong>Ganancia:</strong> <span className="text-success fw-bold">{formatMoney(gananciaVentaSeleccionada)}</span>
                           </div>
-                          {ventaSeleccionada.status !== 'PRESTAMO' && (
-                            <div className="col-12">
-                              <strong>Pago:</strong>{' '}
-                              <span className="text-primary">
-                                {ETIQUETA_PAGO[ventaSeleccionada.tipoPago] ?? ventaSeleccionada.tipoPago ?? '—'}
+                          <div className="col-12">
+                            <strong>Tipo de pago:</strong>{' '}
+                            {ventaSeleccionada.tipoPago ? (
+                              <span className={`badge ${BADGE_PAGO[ventaSeleccionada.tipoPago] ?? 'bg-secondary-subtle text-secondary-emphasis'}`}>
+                                {ETIQUETA_PAGO[ventaSeleccionada.tipoPago] ?? ventaSeleccionada.tipoPago}
                               </span>
+                            ) : (
+                              <span className="text-muted">—</span>
+                            )}
+                          </div>
+                          {ventaSeleccionada.status !== 'PRESTAMO' && pagoDetalle > 0 && cambioDetalle > 0 && (
+                            <div className="col-12">
+                              <strong>Cambio:</strong>{' '}
+                              <span className="text-primary">{formatMoney(cambioDetalle)}</span>
                             </div>
                           )}
                         </div>

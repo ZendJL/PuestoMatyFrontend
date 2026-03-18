@@ -57,7 +57,7 @@ export default function Merma() {
       const existe = prevSeguro.find(i => i?.id === producto.id);
       const inventario = producto.cantidad ?? 0;
       if (inventario <= 0) {
-        alert(`❌ Sin inventario: ${producto.descripcion || 'Producto sin nombre'}`);
+        alert(`\u274c Sin inventario: ${producto.descripcion || 'Producto sin nombre'}`);
         return prevSeguro;
       }
       if (existe) {
@@ -89,7 +89,7 @@ export default function Merma() {
             ? productos.find(p => (p?.codigo || '').toString().trim() === codigo)
             : null;
           if (producto) { agregarItemMerma(producto); }
-          else { alert(`Código "${codigo}" no encontrado`); }
+          else { alert(`C\u00f3digo "${codigo}" no encontrado`); }
           bufferEscaner.current = ''; escaneando = false; setCodigoEscaneado(''); clearTimeout(timerEscaner); timerEscaner = null;
         }
         return;
@@ -128,7 +128,6 @@ export default function Merma() {
     staleTime: 10 * 60 * 1000,
   });
 
-  // ✅ FIX: cálculo de costo con validación robusta + fallback
   useEffect(() => {
     if (costoTimeoutRef.current) clearTimeout(costoTimeoutRef.current);
     if (!Array.isArray(itemsMerma) || itemsMerma.length === 0) {
@@ -138,28 +137,17 @@ export default function Merma() {
     costoTimeoutRef.current = setTimeout(async () => {
       setCostoCargando(true);
       try {
-        // ✅ FIX: solo items con cantidad numérica > 0
         const requests = itemsMerma
           .filter(item => item?.id && Number.isInteger(item.cantidad) && item.cantidad > 0)
-          .map(item => ({
-            productoId: item.id,
-            cantidad: item.cantidad
-          }));
-
-        if (requests.length === 0) {
-          setCostoEstimado(0);
-          setCostoCargando(false);
-          return;
-        }
-
+          .map(item => ({ productoId: item.id, cantidad: item.cantidad }));
+        if (requests.length === 0) { setCostoEstimado(0); setCostoCargando(false); return; }
         const res = await axios.post('/api/mermas/costos-batch', requests);
         const total = Array.isArray(res.data)
           ? res.data.reduce((sum, costo) => sum + (typeof costo === 'number' ? costo : 0), 0)
           : 0;
         setCostoEstimado(total);
       } catch (err) {
-        console.error('❌ costos-batch falló:', err.response?.status, err.response?.data || err.message);
-        // ✅ FALLBACK: estima con precioVenta si el endpoint falla
+        console.error('\u274c costos-batch fall\u00f3:', err.response?.status, err.response?.data || err.message);
         const fallback = itemsMerma.reduce((sum, item) => {
           const precio = item?.precioVenta || item?.precio || 0;
           return sum + (precio * (item?.cantidad || 0));
@@ -202,23 +190,20 @@ export default function Merma() {
   }, []);
 
   const guardarMerma = async () => {
-    if (!Array.isArray(itemsMerma) || itemsMerma.length === 0) return alert('❌ Carrito vacío');
+    if (!Array.isArray(itemsMerma) || itemsMerma.length === 0) return alert('\u274c Carrito vac\u00edo');
     const conExceso = itemsMerma.find(i => (i?.cantidad || 0) > (i?.inventario ?? 0));
-    if (conExceso) return alert(`❌ Excede inventario: ${conExceso.descripcion || 'Producto sin nombre'}`);
+    if (conExceso) return alert(`\u274c Excede inventario: ${conExceso.descripcion || 'Producto sin nombre'}`);
     try {
       const mermaData = {
         tipoMerma,
         motivoGeneral: descripcionMerma?.trim() || null,
         mermaProductos: itemsMerma
           .filter(item => item?.id)
-          .map(item => ({
-            producto: { id: item.id },
-            cantidad: item.cantidad || 0
-          }))
+          .map(item => ({ producto: { id: item.id }, cantidad: item.cantidad || 0 }))
       };
       const res = await axios.post('/api/mermas', mermaData);
       const costoTotalReal = res.data?.costoTotal ?? 0;
-      alert(`✅ Merma guardada\n💰 Costo real: ${formatMoney(costoTotalReal)}`);
+      alert(`\u2705 Merma guardada\n\ud83d\udcb0 Costo: ${formatMoney(costoTotalReal)}`);
       setItemsMerma([]);
       setDescripcionMerma('');
       setBusqueda('');
@@ -227,7 +212,7 @@ export default function Merma() {
       queryClient.invalidateQueries(['productos-merma']);
       setTimeout(() => inputBusquedaRef.current?.focus(), 50);
     } catch (err) {
-      alert(`❌ ${err.response?.data?.message || err.response?.data || 'Error al guardar merma'}`);
+      alert(`\u274c ${err.response?.data?.message || err.response?.data || 'Error al guardar merma'}`);
     }
   };
 
@@ -268,7 +253,7 @@ export default function Merma() {
     <div className="d-flex justify-content-center">
       <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '0.25rem 0' }}>
 
-        {/* ── HEADER ── */}
+        {/* HEADER */}
         <div className="card-header p-0 bg-danger text-white border-bottom-0">
           <div className="d-flex align-items-center px-3 py-2">
             <div className="flex-grow-1">
@@ -277,7 +262,9 @@ export default function Merma() {
                 <div>
                   <h6 className="mb-0 fw-bold" style={{ fontSize: '1rem' }}>Registro de Merma</h6>
                   <small className="opacity-75" style={{ fontSize: '0.7rem' }}>
-                    {totalItems > 0 ? `${totalItems} unidades en lista` : 'Agrega productos para registrar merma'}
+                    {totalItems > 0
+                      ? `${itemsMerma.length} producto(s) \u00b7 ${totalItems} unidades`
+                      : 'Agrega productos para registrar merma'}
                   </small>
                 </div>
               </div>
@@ -290,32 +277,35 @@ export default function Merma() {
                   <div className="fw-bold text-warning" style={{ fontSize: '1.6rem', lineHeight: 1 }}>
                     {formatMoney(costoEstimado)}
                   </div>
-                  <small className="opacity-75" style={{ fontSize: '0.65rem' }}>costo estimado FIFO</small>
+                  <small className="opacity-75" style={{ fontSize: '0.65rem' }}>costo estimado</small>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Tarjetas resumen debajo del header */}
+          {/* Chips de resumen — solo cuando hay items, con texto oscuro legible */}
           {totalItems > 0 && (
-            <div className="d-flex gap-2 px-3 pb-2">
-              <div className="badge bg-white bg-opacity-20 px-3 py-2">
+            <div className="d-flex flex-wrap gap-2 px-3 pb-2">
+              <span className="badge text-white fw-semibold px-3 py-2"
+                style={{ background: 'rgba(0,0,0,0.25)', fontSize: '0.78rem' }}>
                 <i className="bi bi-box-seam me-1" />
-                <span className="fw-bold">{itemsMerma.length}</span> <small>productos</small>
-              </div>
-              <div className="badge bg-white bg-opacity-20 px-3 py-2">
+                {itemsMerma.length} producto{itemsMerma.length !== 1 ? 's' : ''}
+              </span>
+              <span className="badge text-white fw-semibold px-3 py-2"
+                style={{ background: 'rgba(0,0,0,0.25)', fontSize: '0.78rem' }}>
                 <i className="bi bi-stack me-1" />
-                <span className="fw-bold">{totalItems}</span> <small>unidades</small>
-              </div>
-              <div className={`badge px-3 py-2 ${badgeTipo(tipoMerma)}`}>
+                {totalItems} unidad{totalItems !== 1 ? 'es' : ''}
+              </span>
+              <span className={`badge fw-semibold px-3 py-2 ${badgeTipo(tipoMerma)}`}
+                style={{ fontSize: '0.78rem' }}>
                 <i className="bi bi-tag-fill me-1" />
                 {labelTipo(tipoMerma)}
-              </div>
+              </span>
             </div>
           )}
         </div>
 
-        {/* ── BODY ── */}
+        {/* BODY */}
         <div className="card-body py-3">
           <div className="row g-3">
             <div className="col-lg-8">
@@ -353,7 +343,6 @@ export default function Merma() {
                 formatMoney={formatMoney}
               />
 
-              {/* Botón reporte */}
               <div className="mt-3">
                 <button
                   className={`btn w-100 mb-2 ${
@@ -361,12 +350,11 @@ export default function Merma() {
                   }`}
                   onClick={() => setShowReporte(!showReporte)}
                 >
-                  <i className={`bi bi-graph-up me-2`} />
+                  <i className="bi bi-graph-up me-2" />
                   {showReporte ? 'Ocultar reporte' : 'Ver reporte'}
                 </button>
               </div>
 
-              {/* Panel reporte */}
               {showReporte && (
                 <div className="card shadow-sm border-info">
                   <div className="card-header bg-info bg-opacity-10 py-2">
@@ -375,12 +363,12 @@ export default function Merma() {
                     </div>
                     <div className="row g-1">
                       <div className="col-6">
-                        <label className="form-label form-label-sm mb-1 text-muted" style={{ fontSize: '0.7rem' }}>Desde</label>
+                        <label className="form-label mb-1 text-muted" style={{ fontSize: '0.7rem' }}>Desde</label>
                         <input type="date" className="form-control form-control-sm"
                           value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} />
                       </div>
                       <div className="col-6">
-                        <label className="form-label form-label-sm mb-1 text-muted" style={{ fontSize: '0.7rem' }}>Hasta</label>
+                        <label className="form-label mb-1 text-muted" style={{ fontSize: '0.7rem' }}>Hasta</label>
                         <input type="date" className="form-control form-control-sm"
                           value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} />
                       </div>
@@ -399,25 +387,22 @@ export default function Merma() {
                       </div>
                     ) : (
                       <>
-                        {/* Totales del reporte */}
                         <div className="d-flex justify-content-between align-items-center p-2 mb-2 rounded bg-danger bg-opacity-10">
                           <span className="small fw-semibold text-danger">{reporteMermas.length} registros</span>
                           <span className="fw-bold text-danger">
                             {formatMoney(reporteMermas.reduce((s, m) => s + (m?.costoTotal || 0), 0))}
                           </span>
                         </div>
-                        {/* Lista */}
                         {reporteMermas.map((merma) => (
                           <div key={merma?.id || Math.random()} className="border-bottom py-2">
                             <div className="d-flex justify-content-between align-items-start">
                               <div>
-                                <span className={`badge me-1 ${
-                                  badgeTipo(merma?.tipoMerma)
-                                }`} style={{ fontSize: '0.65rem' }}>
+                                <span className={`badge me-1 ${badgeTipo(merma?.tipoMerma)}`}
+                                  style={{ fontSize: '0.65rem' }}>
                                   {labelTipo(merma?.tipoMerma || 'OTRO')}
                                 </span>
                                 <small className="text-muted">
-                                  {merma?.fecha ? new Date(merma.fecha).toLocaleDateString('es-MX') : '—'}
+                                  {merma?.fecha ? new Date(merma.fecha).toLocaleDateString('es-MX') : '\u2014'}
                                 </small>
                               </div>
                               <span className="fw-bold text-danger small">
@@ -426,7 +411,7 @@ export default function Merma() {
                             </div>
                             <div className="small text-muted mt-1">
                               {(merma?.detalles?.length || 0)} producto(s)
-                              {merma?.motivoGeneral && ` · ${merma.motivoGeneral}`}
+                              {merma?.motivoGeneral && ` \u00b7 ${merma.motivoGeneral}`}
                             </div>
                           </div>
                         ))}
@@ -439,7 +424,7 @@ export default function Merma() {
           </div>
         </div>
 
-        {/* ── FOOTER ── */}
+        {/* FOOTER */}
         <div className="card-footer bg-body-tertiary py-3 border-top">
           <div className="row g-2">
             <div className="col-md-4">
@@ -471,6 +456,7 @@ export default function Merma() {
             </div>
           </div>
         </div>
+
       </div>
     </div>
   );

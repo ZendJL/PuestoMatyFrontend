@@ -1,45 +1,91 @@
-export default function ResumenMerma({ 
-  totalItems = 0, 
-  costoEstimado = 0, 
-  formatMoney, 
-  tipoMerma = 'CADUCADO', 
-  labelTipo 
+export default function ResumenMerma({
+  totalItems = 0,
+  costoEstimado = 0,
+  costoCargando = false,
+  formatMoney,
+  tipoMerma = 'CADUCADO',
+  labelTipo,
+  badgeTipo,
 }) {
-  const tipoLabel = labelTipo 
-    ? labelTipo(tipoMerma) 
-    : (tipoMerma === 'CADUCADO' ? 'Caducado' : 
-       tipoMerma === 'USO_PERSONAL' ? 'Uso personal' : 
-       tipoMerma === 'MAL_ESTADO' ? 'Mal estado' : 
+  const tipoLabel = labelTipo
+    ? labelTipo(tipoMerma)
+    : (tipoMerma === 'CADUCADO' ? 'Caducado' :
+       tipoMerma === 'USO_PERSONAL' ? 'Uso Personal' :
+       tipoMerma === 'MAL_ESTADO' ? 'Mal Estado' :
        tipoMerma === 'ROBO' ? 'Robo' : 'Otro');
 
+  const tipoBadgeClass = badgeTipo ? badgeTipo(tipoMerma) : 'bg-danger';
+
+  const tarjetas = [
+    {
+      icon: 'bi-box-seam',
+      color: 'text-primary',
+      bg: 'bg-primary bg-opacity-10',
+      label: 'Productos distintos',
+      valor: totalItems > 0 ? `${totalItems}` : '—',
+      small: 'unidades totales'
+    },
+    {
+      icon: 'bi-tag-fill',
+      color: 'text-warning',
+      bg: 'bg-warning bg-opacity-10',
+      label: 'Tipo de merma',
+      valor: tipoLabel,
+      badge: tipoBadgeClass,
+      esBadge: true,
+    },
+  ];
+
   return (
-    <div className="card border-start border-danger border-3 shadow-sm h-100">
+    <div className="card shadow-sm border-0">
+      <div className="card-header bg-danger text-white py-2">
+        <h6 className="mb-0 fw-semibold">
+          <i className="bi bi-clipboard2-data-fill me-2" />
+          Resumen de merma
+        </h6>
+      </div>
       <div className="card-body p-3">
-        <div className="d-flex justify-content-between align-items-center mb-3">
-          <h6 className="mb-0">
-            <i className="bi bi-file-earmark-text me-2 text-danger"/>Resumen
-          </h6>
-        </div>
-        
-        <div className="mb-3">
-          <div className="d-flex justify-content-between mb-2">
-            <span className="text-body-secondary small">Items</span>
-            <span className="fw-bold fs-5">{totalItems}</span>
-          </div>
-          <div className="d-flex justify-content-between">
-            <span className="text-body-secondary small">Tipo</span>
-            <span className="fw-bold badge bg-danger-subtle text-danger px-2 py-1">
-              {tipoLabel}
-            </span>
-          </div>
+        {/* Tarjetas de datos */}
+        <div className="row g-2 mb-3">
+          {tarjetas.map((t, i) => (
+            <div key={i} className="col-6">
+              <div className={`p-3 rounded ${t.bg} h-100`}>
+                <i className={`bi ${t.icon} fs-4 ${t.color} d-block mb-1`} />
+                <div className="small text-muted" style={{ fontSize: '0.7rem' }}>{t.label}</div>
+                {t.esBadge ? (
+                  <span className={`badge mt-1 ${t.badge}`} style={{ fontSize: '0.75rem' }}>
+                    {t.valor}
+                  </span>
+                ) : (
+                  <div className={`fw-bold fs-5 ${t.color}`}>{t.valor}</div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
 
-        <div className="p-3 rounded bg-danger-subtle mt-3">
-          <div className="d-flex justify-content-between align-items-center">
-            <span className="fw-bold text-danger fs-5">Costo estimado</span>
-            <span className="fs-2 fw-bold text-danger">{formatMoney?.(costoEstimado) || '$0.00'}</span>
+        {/* Costo estimado grande */}
+        <div className="p-3 rounded bg-danger bg-opacity-10 border border-danger border-opacity-25">
+          <div className="d-flex justify-content-between align-items-center mb-1">
+            <span className="small fw-semibold text-danger">
+              <i className="bi bi-currency-dollar me-1" />Costo estimado FIFO
+            </span>
+            {costoCargando && <div className="spinner-border spinner-border-sm text-danger" />}
           </div>
+          <div className="fw-bold text-danger" style={{ fontSize: '2rem', lineHeight: 1.1 }}>
+            {formatMoney?.(costoEstimado) || '$0.00'}
+          </div>
+          <small className="text-muted" style={{ fontSize: '0.7rem' }}>
+            Calculado en tiempo real con método FIFO
+          </small>
         </div>
+
+        {totalItems === 0 && (
+          <div className="text-center text-muted mt-3 small">
+            <i className="bi bi-arrow-left-circle me-1" />
+            Agrega productos para ver el resumen
+          </div>
+        )}
       </div>
     </div>
   );

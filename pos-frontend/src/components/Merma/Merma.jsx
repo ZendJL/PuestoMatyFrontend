@@ -14,30 +14,24 @@ export default function Merma() {
   const [tipoMerma, setTipoMerma] = useState('CADUCADO');
   const [descripcionMerma, setDescripcionMerma] = useState('');
   const [costoEstimado, setCostoEstimado] = useState(0);
+  const [costoCargando, setCostoCargando] = useState(false);
   const [pageSize, setPageSize] = useState(10);
   const [showReporte, setShowReporte] = useState(false);
   const [fechaDesde, setFechaDesde] = useState(new Date().toISOString().slice(0, 10));
   const [fechaHasta, setFechaHasta] = useState(new Date().toISOString().slice(0, 10));
-  
+
   const inputBusquedaRef = useRef(null);
   const costoTimeoutRef = useRef(null);
 
   useEffect(() => {
-    console.log('🔥 MERMA REFRESH - Limpiando estado');
     setItemsMerma([]);
     setBusqueda('');
     setDescripcionMerma('');
     setCostoEstimado(0);
     setShowReporte(false);
     setCodigoEscaneado('');
-    
     queryClient.invalidateQueries(['productos-merma']);
-    
-    const timer = setTimeout(() => {
-      inputBusquedaRef.current?.focus();
-      console.log('🎯 AUTOFOCUS aplicado en Merma');
-    }, 150);
-    
+    const timer = setTimeout(() => inputBusquedaRef.current?.focus(), 150);
     return () => clearTimeout(timer);
   }, []);
 
@@ -50,37 +44,28 @@ export default function Merma() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const totalItems = useMemo(() => 
-    Array.isArray(itemsMerma) 
-      ? itemsMerma.reduce((sum, i) => sum + (i?.cantidad || 0), 0) 
+  const totalItems = useMemo(() =>
+    Array.isArray(itemsMerma)
+      ? itemsMerma.reduce((sum, i) => sum + (i?.cantidad || 0), 0)
       : 0
   , [itemsMerma]);
 
   const agregarItemMerma = useCallback((producto) => {
     if (!producto) return;
-    
     setItemsMerma(prev => {
       const prevSeguro = Array.isArray(prev) ? prev : [];
       const existe = prevSeguro.find(i => i?.id === producto.id);
       const inventario = producto.cantidad ?? 0;
-
       if (inventario <= 0) {
         alert(`❌ Sin inventario: ${producto.descripcion || 'Producto sin nombre'}`);
         return prevSeguro;
       }
-
       if (existe) {
         const nuevaCant = Math.min((existe.cantidad || 0) + 1, inventario);
         return prevSeguro.map(i => i?.id === producto.id ? { ...i, cantidad: nuevaCant } : i);
       }
-
-      return [...prevSeguro, { 
-        ...producto, 
-        cantidad: 1, 
-        inventario: inventario 
-      }];
+      return [...prevSeguro, { ...producto, cantidad: 1, inventario }];
     });
-    
     setBusqueda('');
     setCodigoEscaneado('');
     setTimeout(() => inputBusquedaRef.current?.focus(), 50);
@@ -90,78 +75,41 @@ export default function Merma() {
     const bufferEscaner = { current: '' };
     let timerEscaner = null;
     let escaneando = false;
-
     const handleEscaneo = (e) => {
       const elementoActivo = document.activeElement;
-      const esInputNumerico = elementoActivo?.type === 'number';
-      const esTextarea = elementoActivo?.tagName === 'TEXTAREA';
-      
-      if (esInputNumerico || esTextarea) {
-        if (escaneando) {
-          bufferEscaner.current = '';
-          escaneando = false;
-          setCodigoEscaneado('');
-          clearTimeout(timerEscaner);
-        }
+      if (elementoActivo?.type === 'number' || elementoActivo?.tagName === 'TEXTAREA') {
+        if (escaneando) { bufferEscaner.current = ''; escaneando = false; setCodigoEscaneado(''); clearTimeout(timerEscaner); }
         return;
       }
-
       if (e.key === 'Enter') {
         if (bufferEscaner.current.length > 0) {
-          e.preventDefault();
-          e.stopPropagation();
-          
+          e.preventDefault(); e.stopPropagation();
           const codigo = bufferEscaner.current.trim();
-          const producto = Array.isArray(productos) 
+          const producto = Array.isArray(productos)
             ? productos.find(p => (p?.codigo || '').toString().trim() === codigo)
             : null;
-          
-          if (producto) {
-            agregarItemMerma(producto);
-          } else {
-            alert(`Código "${codigo}" no encontrado`);
-          }
-          
-          bufferEscaner.current = '';
-          escaneando = false;
-          setCodigoEscaneado('');
-          clearTimeout(timerEscaner);
-          timerEscaner = null;
+          if (producto) { agregarItemMerma(producto); }
+          else { alert(`Código "${codigo}" no encontrado`); }
+          bufferEscaner.current = ''; escaneando = false; setCodigoEscaneado(''); clearTimeout(timerEscaner); timerEscaner = null;
         }
         return;
       }
-
       if (!/^[0-9]$/.test(e.key)) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      if (!escaneando) {
-        escaneando = true;
-        bufferEscaner.current = '';
-        setCodigoEscaneado('');
-      }
-
+      e.preventDefault(); e.stopPropagation();
+      if (!escaneando) { escaneando = true; bufferEscaner.current = ''; setCodigoEscaneado(''); }
       bufferEscaner.current += e.key;
       setCodigoEscaneado(bufferEscaner.current);
-
       clearTimeout(timerEscaner);
-      timerEscaner = setTimeout(() => {
-        bufferEscaner.current = '';
-        escaneando = false;
-        setCodigoEscaneado('');
-      }, 500);
+      timerEscaner = setTimeout(() => { bufferEscaner.current = ''; escaneando = false; setCodigoEscaneado(''); }, 500);
     };
-
     window.addEventListener('keydown', handleEscaneo, true);
     return () => window.removeEventListener('keydown', handleEscaneo, true);
   }, [productos, agregarItemMerma]);
 
   const productosFiltrados = useMemo(() => {
     if (!Array.isArray(productos) || codigoEscaneado.length > 0) return [];
-    
     return productos
-      .filter(p => 
+      .filter(p =>
         (p?.descripcion || '').toLowerCase().includes(busqueda.toLowerCase()) ||
         (p?.codigo || '').toLowerCase().includes(busqueda.toLowerCase())
       )
@@ -172,10 +120,7 @@ export default function Merma() {
   const { data: reporteMermas = [], isFetching: loadingReporte } = useQuery({
     queryKey: ['reporte-mermas', fechaDesde, fechaHasta],
     queryFn: async () => {
-      const params = {
-        desde: `${fechaDesde}T00:00:00`,
-        hasta: `${fechaHasta}T23:59:59`,
-      };
+      const params = { desde: `${fechaDesde}T00:00:00`, hasta: `${fechaHasta}T23:59:59` };
       const res = await axios.get('/api/mermas/reporte', { params });
       return Array.isArray(res.data) ? res.data : [];
     },
@@ -183,55 +128,58 @@ export default function Merma() {
     staleTime: 10 * 60 * 1000,
   });
 
+  // ✅ FIX: cálculo de costo con validación robusta + fallback
   useEffect(() => {
     if (costoTimeoutRef.current) clearTimeout(costoTimeoutRef.current);
-
     if (!Array.isArray(itemsMerma) || itemsMerma.length === 0) {
       setCostoEstimado(0);
       return;
     }
-
     costoTimeoutRef.current = setTimeout(async () => {
+      setCostoCargando(true);
       try {
+        // ✅ FIX: solo items con cantidad numérica > 0
         const requests = itemsMerma
-          .filter(item => item?.id)
+          .filter(item => item?.id && Number.isInteger(item.cantidad) && item.cantidad > 0)
           .map(item => ({
             productoId: item.id,
-            cantidad: item.cantidad || 0
+            cantidad: item.cantidad
           }));
 
         if (requests.length === 0) {
           setCostoEstimado(0);
+          setCostoCargando(false);
           return;
         }
 
         const res = await axios.post('/api/mermas/costos-batch', requests);
         const total = Array.isArray(res.data)
-          ? res.data.reduce((sum, costo) => sum + (costo || 0), 0)
+          ? res.data.reduce((sum, costo) => sum + (typeof costo === 'number' ? costo : 0), 0)
           : 0;
         setCostoEstimado(total);
       } catch (err) {
-        console.error('❌ BATCH ERROR:', err.response?.data || err.message);
-        setCostoEstimado(0);
+        console.error('❌ costos-batch falló:', err.response?.status, err.response?.data || err.message);
+        // ✅ FALLBACK: estima con precioVenta si el endpoint falla
+        const fallback = itemsMerma.reduce((sum, item) => {
+          const precio = item?.precioVenta || item?.precio || 0;
+          return sum + (precio * (item?.cantidad || 0));
+        }, 0);
+        setCostoEstimado(fallback);
+      } finally {
+        setCostoCargando(false);
       }
     }, 500);
-
-    return () => {
-      if (costoTimeoutRef.current) clearTimeout(costoTimeoutRef.current);
-    };
+    return () => { if (costoTimeoutRef.current) clearTimeout(costoTimeoutRef.current); };
   }, [itemsMerma]);
 
   const quitarItem = useCallback((id) => {
     if (!id) return;
-    setItemsMerma(prev => 
-      Array.isArray(prev) ? prev.filter(i => i?.id !== id) : []
-    );
+    setItemsMerma(prev => Array.isArray(prev) ? prev.filter(i => i?.id !== id) : []);
     setTimeout(() => inputBusquedaRef.current?.focus(), 50);
   }, []);
 
   const cambiarCantidadItem = useCallback((id, nuevaCantidadRaw) => {
     if (!id) return;
-    // Permitir campo vacío o cero mientras el usuario edita
     if (nuevaCantidadRaw === '' || nuevaCantidadRaw === '0') {
       setItemsMerma(prev =>
         Array.isArray(prev)
@@ -246,7 +194,6 @@ export default function Merma() {
       Array.isArray(prev)
         ? prev.map(i => {
             if (i?.id !== id) return i;
-            // Clampear al inventario sin alert
             const cantidadFinal = Math.min(nuevaCantidad, i?.inventario ?? 0);
             return { ...i, cantidad: cantidadFinal, cantidadRaw: String(cantidadFinal) };
           })
@@ -255,15 +202,9 @@ export default function Merma() {
   }, []);
 
   const guardarMerma = async () => {
-    if (!Array.isArray(itemsMerma) || itemsMerma.length === 0) {
-      return alert('❌ Carrito vacío');
-    }
-
+    if (!Array.isArray(itemsMerma) || itemsMerma.length === 0) return alert('❌ Carrito vacío');
     const conExceso = itemsMerma.find(i => (i?.cantidad || 0) > (i?.inventario ?? 0));
-    if (conExceso) {
-      return alert(`❌ Excede inventario: ${conExceso.descripcion || 'Producto sin nombre'}`);
-    }
-
+    if (conExceso) return alert(`❌ Excede inventario: ${conExceso.descripcion || 'Producto sin nombre'}`);
     try {
       const mermaData = {
         tipoMerma,
@@ -275,52 +216,106 @@ export default function Merma() {
             cantidad: item.cantidad || 0
           }))
       };
-
       const res = await axios.post('/api/mermas', mermaData);
       const costoTotalReal = res.data?.costoTotal ?? 0;
-
-      alert(`✅ Merma guardada\n💰 Costo: ${formatMoney(costoTotalReal)}`);
-      
+      alert(`✅ Merma guardada\n💰 Costo real: ${formatMoney(costoTotalReal)}`);
       setItemsMerma([]);
       setDescripcionMerma('');
       setBusqueda('');
       setCostoEstimado(0);
       setCodigoEscaneado('');
       queryClient.invalidateQueries(['productos-merma']);
-      
       setTimeout(() => inputBusquedaRef.current?.focus(), 50);
     } catch (err) {
       alert(`❌ ${err.response?.data?.message || err.response?.data || 'Error al guardar merma'}`);
     }
   };
 
-  const toggleReporte = () => setShowReporte(!showReporte);
+  const limpiar = () => {
+    setItemsMerma([]);
+    setDescripcionMerma('');
+    setBusqueda('');
+    setCodigoEscaneado('');
+    setTimeout(() => inputBusquedaRef.current?.focus(), 50);
+  };
 
-  if (isLoading) return <div className="fs-6 text-center py-5">Cargando productos...</div>;
-  if (error) return <div className="text-danger fs-6 text-center py-5">Error: {error.message}</div>;
+  const labelTipo = (t) =>
+    t === 'CADUCADO' ? 'Caducado' :
+    t === 'USO_PERSONAL' ? 'Uso Personal' :
+    t === 'MAL_ESTADO' ? 'Mal Estado' :
+    t === 'ROBO' ? 'Robo' : 'Otro';
+
+  const badgeTipo = (t) =>
+    t === 'CADUCADO' ? 'bg-warning text-dark' :
+    t === 'USO_PERSONAL' ? 'bg-info text-dark' :
+    t === 'MAL_ESTADO' ? 'bg-secondary' :
+    t === 'ROBO' ? 'bg-dark' : 'bg-primary';
+
+  if (isLoading) return (
+    <div className="d-flex justify-content-center align-items-center" style={{ minHeight: '200px' }}>
+      <div className="spinner-border text-danger me-3" />
+      <span className="fs-5">Cargando productos...</span>
+    </div>
+  );
+  if (error) return (
+    <div className="alert alert-danger m-3">
+      <i className="bi bi-exclamation-triangle-fill me-2" />
+      Error cargando productos: {error.message}
+    </div>
+  );
 
   return (
     <div className="d-flex justify-content-center">
       <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '0.25rem 0' }}>
-        <div className="card-header p-2 bg-primary text-white border-bottom-0" style={{ minHeight: '48px' }}>
-          <div className="row align-items-center g-0 h-100">
-            <div className="col-md-8">
-              <div className="d-flex align-items-center h-100">
-                <h6 className="mb-0 me-2" style={{ fontSize: '0.95rem', lineHeight: 1.1 }}>📦 Registro Merma</h6>
-                <small className="opacity-75" style={{ fontSize: '0.7rem' }}>
-                  {codigoEscaneado.length > 0 && '🔢 '}
-                </small>
+
+        {/* ── HEADER ── */}
+        <div className="card-header p-0 bg-danger text-white border-bottom-0">
+          <div className="d-flex align-items-center px-3 py-2">
+            <div className="flex-grow-1">
+              <div className="d-flex align-items-center gap-2">
+                <span style={{ fontSize: '1.3rem' }}>📦</span>
+                <div>
+                  <h6 className="mb-0 fw-bold" style={{ fontSize: '1rem' }}>Registro de Merma</h6>
+                  <small className="opacity-75" style={{ fontSize: '0.7rem' }}>
+                    {totalItems > 0 ? `${totalItems} unidades en lista` : 'Agrega productos para registrar merma'}
+                  </small>
+                </div>
               </div>
             </div>
-            <div className="col-md-4 text-end">
-              <div className="fw-bold text-warning" style={{ fontSize: '1.4rem', lineHeight: 1.1 }}>
-                {formatMoney(costoEstimado)}
+            {/* Costo estimado */}
+            <div className="text-end">
+              <div className="d-flex align-items-center gap-2">
+                {costoCargando && <div className="spinner-border spinner-border-sm text-warning" />}
+                <div>
+                  <div className="fw-bold text-warning" style={{ fontSize: '1.6rem', lineHeight: 1 }}>
+                    {formatMoney(costoEstimado)}
+                  </div>
+                  <small className="opacity-75" style={{ fontSize: '0.65rem' }}>costo estimado FIFO</small>
+                </div>
               </div>
-              <small className="opacity-75" style={{ fontSize: '0.65rem' }}>{totalItems} items</small>
             </div>
           </div>
+
+          {/* Tarjetas resumen debajo del header */}
+          {totalItems > 0 && (
+            <div className="d-flex gap-2 px-3 pb-2">
+              <div className="badge bg-white bg-opacity-20 px-3 py-2">
+                <i className="bi bi-box-seam me-1" />
+                <span className="fw-bold">{itemsMerma.length}</span> <small>productos</small>
+              </div>
+              <div className="badge bg-white bg-opacity-20 px-3 py-2">
+                <i className="bi bi-stack me-1" />
+                <span className="fw-bold">{totalItems}</span> <small>unidades</small>
+              </div>
+              <div className={`badge px-3 py-2 ${badgeTipo(tipoMerma)}`}>
+                <i className="bi bi-tag-fill me-1" />
+                {labelTipo(tipoMerma)}
+              </div>
+            </div>
+          )}
         </div>
 
+        {/* ── BODY ── */}
         <div className="card-body py-3">
           <div className="row g-3">
             <div className="col-lg-8">
@@ -337,7 +332,6 @@ export default function Merma() {
                 formatMoney={formatMoney}
                 codigoEscaneado={codigoEscaneado}
               />
-              
               <MermaTabla
                 itemsMerma={itemsMerma}
                 cambiarCantidadItem={cambiarCantidadItem}
@@ -352,69 +346,91 @@ export default function Merma() {
               <ResumenMerma
                 totalItems={totalItems}
                 costoEstimado={costoEstimado}
+                costoCargando={costoCargando}
                 tipoMerma={tipoMerma}
-                labelTipo={(t) => t === 'CADUCADO' ? 'Caducado' : t === 'USO_PERSONAL' ? 'Uso personal' : t === 'MAL_ESTADO' ? 'Mal estado' : t === 'ROBO' ? 'Robo' : 'Otro'}
+                labelTipo={labelTipo}
+                badgeTipo={badgeTipo}
                 formatMoney={formatMoney}
               />
-              
+
+              {/* Botón reporte */}
               <div className="mt-3">
-                <button 
-                  className="btn btn-outline-info w-100 mb-2"
-                  onClick={toggleReporte}
+                <button
+                  className={`btn w-100 mb-2 ${
+                    showReporte ? 'btn-info' : 'btn-outline-info'
+                  }`}
+                  onClick={() => setShowReporte(!showReporte)}
                 >
-                  {showReporte ? '❌ Ocultar' : '📊 Ver'} Reporte
+                  <i className={`bi bi-graph-up me-2`} />
+                  {showReporte ? 'Ocultar reporte' : 'Ver reporte'}
                 </button>
               </div>
 
+              {/* Panel reporte */}
               {showReporte && (
                 <div className="card shadow-sm border-info">
-                  <div className="card-header bg-info bg-opacity-10">
-                    <div className="row">
+                  <div className="card-header bg-info bg-opacity-10 py-2">
+                    <div className="fw-semibold small mb-2">
+                      <i className="bi bi-calendar-range me-1" /> Filtrar por fecha
+                    </div>
+                    <div className="row g-1">
                       <div className="col-6">
-                        <input
-                          type="date"
-                          className="form-control form-control-sm"
-                          value={fechaDesde}
-                          onChange={(e) => setFechaDesde(e.target.value)}
-                        />
+                        <label className="form-label form-label-sm mb-1 text-muted" style={{ fontSize: '0.7rem' }}>Desde</label>
+                        <input type="date" className="form-control form-control-sm"
+                          value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} />
                       </div>
                       <div className="col-6">
-                        <input
-                          type="date"
-                          className="form-control form-control-sm"
-                          value={fechaHasta}
-                          onChange={(e) => setFechaHasta(e.target.value)}
-                        />
+                        <label className="form-label form-label-sm mb-1 text-muted" style={{ fontSize: '0.7rem' }}>Hasta</label>
+                        <input type="date" className="form-control form-control-sm"
+                          value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} />
                       </div>
                     </div>
                   </div>
-                  <div className="card-body p-2" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  <div className="card-body p-2" style={{ maxHeight: '340px', overflowY: 'auto' }}>
                     {loadingReporte ? (
                       <div className="text-center py-3">
-                        <div className="spinner-border spinner-border-sm me-2" role="status"/>
-                        Cargando...
+                        <div className="spinner-border spinner-border-sm text-info me-2" />
+                        Cargando reporte...
                       </div>
                     ) : !Array.isArray(reporteMermas) || reporteMermas.length === 0 ? (
-                      <div className="text-muted text-center py-5">
-                        <i className="bi bi-inbox fs-2 d-block mb-3 opacity-50"/>
-                        <div>Sin mermas en este rango</div>
+                      <div className="text-muted text-center py-4">
+                        <i className="bi bi-inbox fs-2 d-block mb-2 opacity-50" />
+                        <div className="small">Sin mermas en este rango</div>
                       </div>
                     ) : (
-                      <div>
-                        {reporteMermas.slice(0, 5).map((merma) => (
-                          <div key={merma?.id || Math.random()} className="border-bottom py-2 small">
-                            <div className="fw-bold">{merma?.tipoMerma || 'N/A'}</div>
-                            <div>{formatMoney(merma?.costoTotal || 0)}</div>
-                            <div className="text-muted">
-                              {(merma?.detalles?.length || 0)} productos • 
-                              {merma?.fecha ? new Date(merma.fecha).toLocaleDateString() : 'Sin fecha'}
+                      <>
+                        {/* Totales del reporte */}
+                        <div className="d-flex justify-content-between align-items-center p-2 mb-2 rounded bg-danger bg-opacity-10">
+                          <span className="small fw-semibold text-danger">{reporteMermas.length} registros</span>
+                          <span className="fw-bold text-danger">
+                            {formatMoney(reporteMermas.reduce((s, m) => s + (m?.costoTotal || 0), 0))}
+                          </span>
+                        </div>
+                        {/* Lista */}
+                        {reporteMermas.map((merma) => (
+                          <div key={merma?.id || Math.random()} className="border-bottom py-2">
+                            <div className="d-flex justify-content-between align-items-start">
+                              <div>
+                                <span className={`badge me-1 ${
+                                  badgeTipo(merma?.tipoMerma)
+                                }`} style={{ fontSize: '0.65rem' }}>
+                                  {labelTipo(merma?.tipoMerma || 'OTRO')}
+                                </span>
+                                <small className="text-muted">
+                                  {merma?.fecha ? new Date(merma.fecha).toLocaleDateString('es-MX') : '—'}
+                                </small>
+                              </div>
+                              <span className="fw-bold text-danger small">
+                                {formatMoney(merma?.costoTotal || 0)}
+                              </span>
+                            </div>
+                            <div className="small text-muted mt-1">
+                              {(merma?.detalles?.length || 0)} producto(s)
+                              {merma?.motivoGeneral && ` · ${merma.motivoGeneral}`}
                             </div>
                           </div>
                         ))}
-                        {reporteMermas.length > 5 && (
-                          <small className="text-muted">+{reporteMermas.length - 5} más...</small>
-                        )}
-                      </div>
+                      </>
                     )}
                   </div>
                 </div>
@@ -423,33 +439,34 @@ export default function Merma() {
           </div>
         </div>
 
+        {/* ── FOOTER ── */}
         <div className="card-footer bg-body-tertiary py-3 border-top">
           <div className="row g-2">
-            <div className="col-md-6">
-              <button 
-                className="btn btn-outline-secondary w-100 h-100" 
-                onClick={() => {
-                  setItemsMerma([]);
-                  setDescripcionMerma('');
-                  setBusqueda('');
-                  setCodigoEscaneado('');
-                  setTimeout(() => inputBusquedaRef.current?.focus(), 50);
-                }}
-              >
-                <i className="bi bi-arrow-repeat me-2"/>Limpiar
+            <div className="col-md-4">
+              <button className="btn btn-outline-secondary w-100" onClick={limpiar}>
+                <i className="bi bi-arrow-repeat me-2" />Limpiar lista
               </button>
             </div>
-            <div className="col-md-6">
-              <button 
-                className={`btn w-100 h-100 fs-5 fw-bold text-white shadow-sm ${
+            <div className="col-md-8">
+              <button
+                className={`btn w-100 fw-bold text-white shadow-sm ${
                   totalItems === 0 ? 'btn-secondary' : 'btn-danger'
                 }`}
+                style={{ minHeight: '50px' }}
                 onClick={guardarMerma}
                 disabled={totalItems === 0}
               >
-                <i className="bi bi-check-circle-fill me-2 fs-4"/>
-                Guardar Merma
-                <div className="small mt-1 opacity-90">{formatMoney(costoEstimado)}</div>
+                <div className="d-flex align-items-center justify-content-center gap-2">
+                  <i className="bi bi-check-circle-fill fs-5" />
+                  <div>
+                    <div>Guardar Merma</div>
+                    {totalItems > 0 && (
+                      <div className="small opacity-90">
+                        {costoCargando ? 'Calculando...' : `Costo estimado: ${formatMoney(costoEstimado)}`}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </button>
             </div>
           </div>

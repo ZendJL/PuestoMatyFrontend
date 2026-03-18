@@ -276,13 +276,13 @@ export default function Venta() {
         </div>
       )}
 
-      {/* LAYOUT PRINCIPAL — altura fija sin scroll */}
+      {/* LAYOUT PRINCIPAL — full width, tipo página (sin card wrapper) */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
-        height: 'calc(100vh - 60px)',  /* 60px = altura navbar */
+        height: 'calc(100vh - 60px)',
         overflow: 'hidden',
-        padding: '8px 12px',
+        padding: '8px 16px',
         gap: '8px',
       }}>
 
@@ -307,13 +307,11 @@ export default function Venta() {
           </div>
         </div>
 
-        {/* CUERPO — dos columnas */}
-        <div style={{ display: 'flex', gap: '10px', flex: 1, minHeight: 0 }}>
+        {/* CUERPO — tres columnas cuando hay cobro, dos si fiado */}
+        <div style={{ display: 'flex', gap: '12px', flex: 1, minHeight: 0 }}>
 
           {/* COLUMNA IZQUIERDA — búsqueda + carrito */}
-          <div style={{ flex: '1 1 60%', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
-
-            {/* BÚSQUEDA */}
+          <div style={{ flex: '1 1 55%', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
             <ProductoSearch
               busquedaCodigo={busquedaCodigo}
               setBusquedaCodigo={setBusquedaCodigo}
@@ -325,8 +323,6 @@ export default function Venta() {
               codigoEscaneado={codigoEscaneado}
               productos={productos}
             />
-
-            {/* CARRITO — ocupa el resto */}
             <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
               <VentaTabla
                 carrito={venta}
@@ -338,15 +334,16 @@ export default function Venta() {
             </div>
           </div>
 
-          {/* COLUMNA DERECHA — modo pago + cobro + botón */}
+          {/* COLUMNA DERECHA — modo pago + cobro + total + botones */}
           <div style={{
-            flex: '0 0 340px',
+            flex: '0 0 380px',
             display: 'flex',
             flexDirection: 'column',
             gap: '8px',
             minHeight: 0,
             overflowY: 'auto',
           }}>
+            {/* Selector fiado/contado */}
             <ModoPago modoPrestamo={modoPrestamo} setModoPrestamo={setModoPrestamo} />
 
             {modoPrestamo ? (
@@ -379,9 +376,8 @@ export default function Venta() {
               />
             )}
 
-            {/* TOTAL + BOTONES */}
-            <div className="mt-auto" style={{ flexShrink: 0 }}>
-              {/* Total grande */}
+            {/* TOTAL + BOTONES — siempre al final de la columna, no al fondo de la pantalla */}
+            <div style={{ marginTop: 'auto', flexShrink: 0 }}>
               <div
                 className={`rounded p-3 mb-2 text-center ${modoPrestamo ? 'bg-warning-subtle border border-warning' : 'bg-success-subtle border border-success'}`}
               >
@@ -401,11 +397,11 @@ export default function Venta() {
                 </div>
               </div>
 
-              {/* Botones acción */}
+              {/* Botones acción — más grandes */}
               <div className="d-flex gap-2">
                 <button
-                  className="btn btn-outline-secondary fw-semibold"
-                  style={{ height: '52px', minWidth: '90px', fontSize: '0.9rem' }}
+                  className="btn btn-outline-secondary fw-bold"
+                  style={{ height: '60px', minWidth: '110px', fontSize: '1rem' }}
                   onClick={limpiarVenta}
                 >
                   <i className="bi bi-arrow-repeat me-1" />Limpiar
@@ -416,7 +412,7 @@ export default function Venta() {
                       ? 'btn-secondary'
                       : modoPrestamo ? 'btn-warning' : 'btn-success'
                   }`}
-                  style={{ height: '52px', fontSize: '1.2rem' }}
+                  style={{ height: '60px', fontSize: '1.35rem' }}
                   onClick={handleCobrar}
                   disabled={venta.length === 0 || (modoPrestamo && !cuentaSeleccionada)}
                 >

@@ -4,73 +4,58 @@ import ReporteVentasPorProducto from './reportes/ReporteVentasPorProducto';
 import ReporteDeudas from './reportes/ReporteDeudas';
 import ReporteMermas from './reportes/ReporteMermas';
 
+const TABS = [
+  { id: 'ventas',         label: 'Ventas',             icon: 'bi-bar-chart-line-fill',  color: 'primary' },
+  { id: 'ventasProducto', label: 'Por Producto',        icon: 'bi-box-seam-fill',        color: 'success' },
+  { id: 'mermas',         label: 'Mermas',              icon: 'bi-trash3-fill',          color: 'danger'  },
+];
+
 export default function Reportes() {
   const [tab, setTab] = useState('ventas');
-  const isActive = (value) => tab === value;
 
   return (
-    <div className="d-flex justify-content-center">
-      <div
-        className="card shadow-sm w-100 fs-6"
-        style={{
-          maxWidth: 'calc(100vw - 100px)',
-          margin: '0.25rem 0', // ✅ ULTRA COMPACTO ARRIBA
-        }}
-      >
-        {/* ✅ HEADER ULTRA COMPACTO (~42px total) */}
-        <div className="card-header p-0 bg-primary text-white" style={{ minHeight: '42px' }}>
-          <div className="px-2 pt-1 pb-0 d-flex justify-content-between align-items-center" style={{ fontSize: '0.85rem' }}>
-            <h6 className="mb-0" style={{ fontSize: '0.95rem' }}>📊 Reportes</h6>
-            <small className="opacity-75">Ventas/mermas</small>
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 70px)', overflow: 'hidden' }}>
 
-          {/* Tabs con tamaño legible */}
-          <ul className="nav nav-tabs card-header-tabs px-2 border-0 mt-0" style={{ fontSize: '0.85rem' }}>
-            {[
-              { id: 'ventas', label: 'Ventas' },
-              { id: 'ventasProducto', label: 'Ventas Por Producto' },
-              { id: 'mermas', label: 'Mermas' },
-            ].map((t) => (
-              <li className="nav-item" key={t.id}>
-                <button
-                  type="button"
-                  className={`nav-link border-0 px-3 py-1 fw-semibold ${
-                    isActive(t.id)
-                      ? 'bg-body text-primary shadow-sm'
-                      : 'bg-primary text-white opacity-90'
-                  }`}
-                  style={{
-                    minHeight: '30px',
-                    fontSize: '0.85rem',
-                    transition: 'all 0.15s ease',
-                  }}
-                  onClick={() => setTab(t.id)}
-                  onMouseEnter={(e) => {
-                    if (!isActive(t.id)) {
-                      e.currentTarget.style.backgroundColor = '#e9ecef';
-                      e.currentTarget.style.color = '#0d6efd';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive(t.id)) {
-                      e.currentTarget.style.backgroundColor = '';
-                      e.currentTarget.style.color = '';
-                    }
-                  }}
-                >
-                  {t.label}
-                </button>
-              </li>
-            ))}
-          </ul>
+      {/* HEADER */}
+      <div className="bg-primary text-white px-4 py-2 flex-shrink-0 d-flex align-items-center justify-content-between" style={{ minHeight: 52 }}>
+        <div>
+          <h5 className="mb-0 fw-bold">📊 Reportes</h5>
+          <small className="opacity-75">Consulta y análisis de ventas, productos y mermas</small>
         </div>
+      </div>
 
-        {/* Contenido */}
-        <div className="card-body py-3 bg-body">
-          {tab === 'ventas' && <ReporteVentasGenerales />}
-          {tab === 'ventasProducto' && <ReporteVentasPorProducto />}
-          {tab === 'mermas' && <ReporteMermas />}
-        </div>
+      {/* TABS — grandes y claros */}
+      <div className="flex-shrink-0 border-bottom bg-body d-flex" style={{ padding: '0 1rem' }}>
+        {TABS.map(t => (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => setTab(t.id)}
+            className={`d-flex align-items-center gap-2 fw-bold border-0 px-4 py-3 ${
+              tab === t.id
+                ? `text-${t.color} border-bottom border-3 border-${t.color} bg-body`
+                : 'text-secondary bg-body'
+            }`}
+            style={{
+              fontSize: '1rem',
+              borderBottom: tab === t.id ? `3px solid` : '3px solid transparent',
+              borderRadius: 0,
+              cursor: 'pointer',
+              transition: 'color 0.15s',
+              background: 'none',
+            }}
+          >
+            <i className={`bi ${t.icon} fs-5`} />
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* CONTENIDO */}
+      <div className="flex-fill overflow-auto p-3">
+        {tab === 'ventas'         && <ReporteVentasGenerales />}
+        {tab === 'ventasProducto' && <ReporteVentasPorProducto />}
+        {tab === 'mermas'         && <ReporteMermas />}
       </div>
     </div>
   );

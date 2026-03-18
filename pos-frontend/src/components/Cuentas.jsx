@@ -186,7 +186,7 @@ export default function Cuentas() {
                 {nuevaCuentaMutation.isPending ? <span className="spinner-border spinner-border-sm" /> : <><i className="bi bi-check-circle-fill me-1" />Crear</>}
               </button>
               <button className="btn btn-outline-secondary btn-lg" onClick={() => { setMostrarNuevoCliente(false); setNuevoCliente({ nombre: '', descripcion: '' }); }}>
-                <i className="bi bi-x-lg" />
+                <i className="bi bi-x-lg" />Cerrar
               </button>
             </div>
           </div>
@@ -200,7 +200,7 @@ export default function Cuentas() {
             <span className="input-group-text"><i className="bi bi-search" /></span>
             <input type="text" className="form-control form-control-lg" placeholder="Buscar cliente..."
               value={busqueda} onChange={e => setBusqueda(e.target.value)} />
-            {busqueda && <button className="btn btn-outline-secondary" onClick={() => setBusqueda('')}><i className="bi bi-x" /></button>}
+            {busqueda && <button className="btn btn-outline-secondary" onClick={() => setBusqueda('')}><i className="bi bi-x" />Limpiar</button>}
           </div>
         </div>
         <button className={`btn btn-lg fw-semibold ${soloDeudores ? 'btn-danger' : 'btn-outline-danger'}`}
@@ -272,7 +272,7 @@ export default function Cuentas() {
                     id: 'acciones', header: '', style: { width: 80 }, align: 'center',
                     render: c => editandoCliente !== c?.id ? (
                       <button className="btn btn-outline-primary btn-sm" onClick={e => { e.stopPropagation(); handleEditarCliente(c); }}>
-                        <i className="bi bi-pencil" />
+                        <i className="bi bi-pencil" />Editar
                       </button>
                     ) : null,
                   },
@@ -301,7 +301,7 @@ export default function Cuentas() {
                 </span>
               </div>
               <button className="btn btn-outline-secondary" onClick={() => { setCuentaExpandida(null); setVentaSeleccionada(null); }}>
-                <i className="bi bi-x-lg" />
+                <i className="bi bi-x-lg" />Cerrar
               </button>
             </div>
 
@@ -368,7 +368,7 @@ export default function Cuentas() {
                       <div className="card-body p-0" style={{ maxHeight: 220, overflowY: 'auto' }}>
                         <table className="table table-sm table-hover mb-0">
                           <thead className="table-light sticky-top">
-                            <tr><th>Monto</th><th>Antes</th><th>Después</th><th>Tipo</th><th>Fecha</th><th style={{width:50}}></th></tr>
+                            <tr><th>Monto</th><th>Antes</th><th>Después</th><th>Tipo</th><th>Fecha</th><th style={{width:50}}>Recibo</th></tr>
                           </thead>
                           <tbody>
                             {detalleCuenta.ultimosAbonos.map(a => {
@@ -381,7 +381,7 @@ export default function Cuentas() {
                                   <td className="fw-bold text-primary">{formatMoney(a?.nuevoSaldo || 0)}</td>
                                   <td><span className={`badge bg-${meta.color}-subtle text-${meta.color}-emphasis border border-${meta.color}-subtle`}>{meta.label}</span></td>
                                   <td><small className="text-muted">{formatFecha(a?.fecha)}</small></td>
-                                  <td><button className="btn btn-sm btn-outline-secondary" onClick={() => imprimirRecibo(a, cuentaExpandida, tp)} title="Recibo"><i className="bi bi-printer" /></button></td>
+                                  <td><button className="btn btn-sm btn-outline-secondary" onClick={() => imprimirRecibo(a, cuentaExpandida, tp)} title="Recibo"><i className="bi bi-printer" />Imprimir</button></td>
                                 </tr>
                               );
                             })}
@@ -425,7 +425,7 @@ export default function Cuentas() {
                         <div className="card-footer p-0">
                           <div className="bg-body-tertiary px-3 py-2 d-flex justify-content-between align-items-center">
                             <span className="fw-bold">📦 Productos de venta #{ventaSeleccionada.ventaId} — {formatMoney(ventaSeleccionada.totalVenta || 0)}</span>
-                            <button className="btn btn-sm btn-outline-secondary" onClick={() => setVentaSeleccionada(null)}><i className="bi bi-x" /></button>
+                            <button className="btn btn-sm btn-outline-secondary" onClick={() => setVentaSeleccionada(null)}><i className="bi bi-x" />Cerrar</button>
                           </div>
                           {loadingVenta ? (
                             <div className="text-center py-3"><span className="spinner-border spinner-border-sm" /></div>

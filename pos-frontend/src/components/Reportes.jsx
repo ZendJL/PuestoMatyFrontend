@@ -5,26 +5,27 @@ import ReporteDeudas from './reportes/ReporteDeudas';
 import ReporteMermas from './reportes/ReporteMermas';
 
 const TABS = [
-  { id: 'ventas',         label: 'Ventas',             icon: 'bi-bar-chart-line-fill',  color: 'primary' },
-  { id: 'ventasProducto', label: 'Por Producto',        icon: 'bi-box-seam-fill',        color: 'success' },
-  { id: 'mermas',         label: 'Mermas',              icon: 'bi-trash3-fill',          color: 'danger'  },
+  { id: 'ventas',         label: 'Ventas Generales',   icon: 'bi-bar-chart-line-fill',  color: 'primary',  desc: 'Historial de todas las ventas' },
+  { id: 'ventasProducto', label: 'Por Producto',        icon: 'bi-box-seam-fill',        color: 'success',  desc: 'Qué productos se vendieron más' },
+  { id: 'mermas',         label: 'Mermas',              icon: 'bi-trash3-fill',          color: 'danger',   desc: 'Productos dados de baja' },
 ];
 
 export default function Reportes() {
   const [tab, setTab] = useState('ventas');
+  const tabActual = TABS.find(t => t.id === tab);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 70px)', overflow: 'hidden' }}>
 
       {/* HEADER */}
-      <div className="bg-primary text-white px-4 py-2 flex-shrink-0 d-flex align-items-center justify-content-between" style={{ minHeight: 52 }}>
+      <div className="bg-primary text-white px-4 py-3 flex-shrink-0 d-flex align-items-center justify-content-between" style={{ minHeight: 64 }}>
         <div>
-          <h5 className="mb-0 fw-bold">📊 Reportes</h5>
-          <small className="opacity-75">Consulta y análisis de ventas, productos y mermas</small>
+          <h4 className="mb-0 fw-bold">📊 Reportes</h4>
+          <small className="opacity-75">{tabActual?.desc}</small>
         </div>
       </div>
 
-      {/* TABS — grandes y claros */}
+      {/* TABS */}
       <div className="flex-shrink-0 border-bottom bg-body d-flex" style={{ padding: '0 1rem' }}>
         {TABS.map(t => (
           <button
@@ -33,7 +34,7 @@ export default function Reportes() {
             onClick={() => setTab(t.id)}
             className={`d-flex align-items-center gap-2 fw-bold border-0 px-4 py-3 ${
               tab === t.id
-                ? `text-${t.color} border-bottom border-3 border-${t.color} bg-body`
+                ? `text-${t.color} bg-body`
                 : 'text-secondary bg-body'
             }`}
             style={{

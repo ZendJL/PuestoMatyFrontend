@@ -58,7 +58,7 @@ export default function Proveedores() {
     mutationFn: ({ id, cantidad, costo }) =>
       axios.post(`/api/productos/${id}/agregar-stock?cantidad=${cantidad}&precioCompra=${costo}`),
     onSuccess: () => {
-      alert('✅ Compra registrada e inventario actualizado');
+      alert('\u2705 Compra registrada e inventario actualizado');
       setMostrarCompra(false);
       setProductoCompra(null);
       setCantidadCompra('');
@@ -66,69 +66,84 @@ export default function Proveedores() {
       queryClient.invalidateQueries({ queryKey: ['productos-altas'] });
       queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
     },
-    onError: (err) => alert('❌ Error: ' + (err.response?.data?.message || err.message)),
+    onError: (err) => alert('\u274c Error: ' + (err.response?.data?.message || err.message)),
   });
 
   const handleRegistrarCompra = () => {
     const cant = parseInt(cantidadCompra, 10);
     const costo = parseFloat(costoCompra);
     if (!productoCompra) return;
-    if (!cant || cant <= 0) { alert('Cantidad inválida'); return; }
-    if (isNaN(costo) || costo < 0) { alert('Costo inválido'); return; }
+    if (!cant || cant <= 0) { alert('Cantidad inv\u00e1lida'); return; }
+    if (isNaN(costo) || costo < 0) { alert('Costo inv\u00e1lido'); return; }
     comprarMutation.mutate({ id: productoCompra.id, cantidad: cant, costo });
   };
 
   const provSelec = proveedoresFiltrados.find(p => p.nombre === proveedorSeleccionado);
 
-  if (isLoading) return <div className="text-center py-5">Cargando proveedores...</div>;
+  if (isLoading) return <div className="text-center py-5 fs-5">Cargando proveedores...</div>;
 
   return (
-    <div className="d-flex justify-content-center">
-      <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '0.25rem 0' }}>
+    <div style={{ height: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-        <div className="card-header p-2 bg-primary text-white border-bottom-0" style={{ minHeight: '48px' }}>
-          <div className="d-flex align-items-center justify-content-between h-100">
-            <h6 className="mb-0" style={{ fontSize: '0.95rem' }}>🏭 Proveedores</h6>
-            <small className="opacity-75">{proveedores.length} proveedores · {productos.length} productos</small>
+      {/* ── HEADER ─────────────────────────────────────────────── */}
+      <div className="bg-primary text-white px-3 py-2 d-flex justify-content-between align-items-center flex-shrink-0" style={{ minHeight: 54 }}>
+        <div>
+          <h5 className="mb-0 fw-bold">🏤 Proveedores</h5>
+          <small className="opacity-75">{proveedores.length} proveedores · {productos.length} productos</small>
+        </div>
+        <div className="d-flex gap-3">
+          <div className="border border-white border-opacity-50 rounded px-3 py-1 text-center">
+            <div className="small opacity-75">Proveedores</div>
+            <div className="fs-5 fw-bold">{proveedores.length}</div>
+          </div>
+          <div className="border border-white border-opacity-50 rounded px-3 py-1 text-center">
+            <div className="small opacity-75">Valor total</div>
+            <div className="fs-6 fw-bold">{formatMoney(proveedores.reduce((s, pv) => s + pv.valorInventario, 0))}</div>
           </div>
         </div>
+      </div>
 
-        <div className="card-body py-3">
-          <div className="row g-3">
+      {/* ── BARRA FILTRO ────────────────────────────────────────── */}
+      <div className="bg-body-tertiary border-bottom px-3 py-2 flex-shrink-0">
+        <div className="input-group" style={{ maxWidth: 400 }}>
+          <span className="input-group-text"><i className="bi bi-search" /></span>
+          <input
+            type="text"
+            className="form-control"
+            placeholder="Buscar proveedor o producto..."
+            value={busqueda}
+            onChange={e => setBusqueda(e.target.value)}
+          />
+          {busqueda && (
+            <button className="btn btn-outline-secondary" onClick={() => setBusqueda('')}>
+              <i className="bi bi-x" />
+            </button>
+          )}
+        </div>
+      </div>
 
-            <div className="col-lg-4">
-              <div className="mb-2">
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="🔍 Buscar proveedor o producto..."
-                  value={busqueda}
-                  onChange={e => setBusqueda(e.target.value)}
-                />
+      {/* ── CUERPO 2 COLUMNAS ────────────────────────────────── */}
+      <div className="flex-fill d-flex overflow-hidden">
+
+        {/* COLUMNA IZQUIERDA: lista de proveedores */}
+        <div
+          className="d-flex flex-column border-end"
+          style={{ width: provSelec ? '35%' : '100%', minWidth: 280, transition: 'width 0.2s' }}
+        >
+          <div className="overflow-auto flex-fill">
+            {proveedoresFiltrados.length === 0 ? (
+              <div className="text-center text-muted py-5">
+                <i className="bi bi-search fs-1 d-block mb-2 opacity-50" />
+                <h5>Sin resultados</h5>
               </div>
-
-              <div className="row g-2 mb-3">
-                <div className="col-6">
-                  <div className="border rounded p-2 text-center">
-                    <div className="small text-muted">Proveedores</div>
-                    <div className="fs-4 fw-bold text-primary">{proveedores.length}</div>
-                  </div>
-                </div>
-                <div className="col-6">
-                  <div className="border rounded p-2 text-center">
-                    <div className="small text-muted">Valor total</div>
-                    <div className="fw-bold text-success" style={{ fontSize: '0.9rem' }}>
-                      {formatMoney(proveedores.reduce((s, pv) => s + pv.valorInventario, 0))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="list-group" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+            ) : (
+              <div className="list-group list-group-flush">
                 {proveedoresFiltrados.map(pv => (
                   <button
                     key={pv.nombre}
-                    className={`list-group-item list-group-item-action d-flex justify-content-between align-items-start py-2 ${proveedorSeleccionado === pv.nombre ? 'active' : ''}`}
+                    className={`list-group-item list-group-item-action d-flex justify-content-between align-items-start py-3 px-3 ${
+                      proveedorSeleccionado === pv.nombre ? 'active' : ''
+                    }`}
                     onClick={() => setProveedorSeleccionado(pv.nombre === proveedorSeleccionado ? null : pv.nombre)}
                   >
                     <div>
@@ -142,94 +157,102 @@ export default function Proveedores() {
                         {formatMoney(pv.valorInventario)}
                       </div>
                       {pv.productos.some(p => (p.cantidad ?? 0) <= INVENTARIO_BAJO_UMBRAL) && (
-                        <span className="badge bg-warning text-dark ms-1" style={{ fontSize: '0.65rem' }}>⚠️ Inventario bajo</span>
+                        <span className="badge bg-warning text-dark ms-1" style={{ fontSize: '0.65rem' }}>⚠️ Inv. bajo</span>
                       )}
                     </div>
                   </button>
                 ))}
-                {proveedoresFiltrados.length === 0 && (
-                  <div className="text-center text-muted py-4">
-                    <i className="bi bi-search fs-3 d-block mb-2 opacity-50" />
-                    Sin resultados
-                  </div>
-                )}
               </div>
-            </div>
-
-            <div className="col-lg-8">
-              {!provSelec ? (
-                <div className="text-center text-muted py-5">
-                  <i className="bi bi-building fs-1 d-block mb-3 opacity-25" />
-                  <h5>Selecciona un proveedor</h5>
-                  <p className="small">Haz clic en un proveedor de la lista para ver sus productos</p>
-                </div>
-              ) : (
-                <div className="card shadow-sm">
-                  <div className="card-header d-flex justify-content-between align-items-center py-2">
-                    <h6 className="mb-0">🏭 {provSelec.nombre}</h6>
-                    <div className="d-flex gap-2">
-                      <span className="badge bg-primary">{provSelec.totalProductos} productos</span>
-                      <span className="badge bg-success">{formatMoney(provSelec.valorInventario)}</span>
-                    </div>
-                  </div>
-                  <div className="card-body p-0" style={{ maxHeight: '420px', overflowY: 'auto' }}>
-                    <table className="table table-hover table-sm mb-0">
-                      <thead className="table-light sticky-top">
-                        <tr>
-                          <th>Producto</th>
-                          <th className="text-end" style={{ width: 80 }}>Inventario</th>
-                          <th className="text-end" style={{ width: 100 }}>Costo</th>
-                          <th className="text-end" style={{ width: 100 }}>Precio</th>
-                          <th className="text-center" style={{ width: 110 }}>Acción</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {provSelec.productos.map(p => {
-                          const inventarioBajo = (p.cantidad ?? 0) <= INVENTARIO_BAJO_UMBRAL;
-                          return (
-                            <tr key={p.id} className={p.activo === false ? 'opacity-50' : ''}>
-                              <td>
-                                <div className="fw-semibold">{p.descripcion}</div>
-                                <small className="text-muted">#{p.codigo}</small>
-                                {p.activo === false && (
-                                  <span className="badge bg-secondary ms-1" style={{ fontSize: '0.6rem' }}>Inactivo</span>
-                                )}
-                              </td>
-                              <td className="text-end">
-                                <span className={`fw-bold ${inventarioBajo ? ((p.cantidad ?? 0) === 0 ? 'text-danger' : 'text-warning') : 'text-success'}`}>
-                                  {p.cantidad ?? 0}
-                                  {inventarioBajo && <i className="bi bi-exclamation-triangle-fill ms-1" style={{ fontSize: '0.7rem' }} />}
-                                </span>
-                              </td>
-                              <td className="text-end text-muted small">{p.precioCompra ? formatMoney(p.precioCompra) : '—'}</td>
-                              <td className="text-end text-success fw-semibold">{formatMoney(p.precio)}</td>
-                              <td className="text-center p-1">
-                                <button
-                                  className="btn btn-sm btn-outline-primary"
-                                  style={{ fontSize: '0.75rem' }}
-                                  onClick={() => {
-                                    setProductoCompra(p);
-                                    setCostoCompra(p.precioCompra ? String(p.precioCompra) : '');
-                                    setCantidadCompra('');
-                                    setMostrarCompra(true);
-                                  }}
-                                >
-                                  <i className="bi bi-plus-circle me-1" />Comprar
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
+            )}
           </div>
         </div>
+
+        {/* COLUMNA DERECHA: productos del proveedor */}
+        {provSelec ? (
+          <div className="d-flex flex-column flex-fill overflow-hidden bg-body">
+
+            {/* Header detalle */}
+            <div className="px-3 py-2 border-bottom d-flex justify-content-between align-items-center bg-body-tertiary flex-shrink-0">
+              <div>
+                <h5 className="mb-0 fw-bold">🏤 {provSelec.nombre}</h5>
+                <div className="d-flex gap-2 mt-1">
+                  <span className="badge bg-primary">{provSelec.totalProductos} productos</span>
+                  <span className="badge bg-success">{formatMoney(provSelec.valorInventario)}</span>
+                </div>
+              </div>
+              <button className="btn btn-outline-secondary" onClick={() => setProveedorSeleccionado(null)}>
+                <i className="bi bi-x-lg" /> Cerrar
+              </button>
+            </div>
+
+            <div className="overflow-auto flex-fill">
+              <table className="table table-hover table-sm mb-0">
+                <thead className="table-light sticky-top">
+                  <tr>
+                    <th>Producto</th>
+                    <th className="text-end" style={{ width: 90 }}>Inventario</th>
+                    <th className="text-end" style={{ width: 110 }}>Costo</th>
+                    <th className="text-end" style={{ width: 110 }}>Precio</th>
+                    <th className="text-center" style={{ width: 120 }}>Acción</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {provSelec.productos.map(p => {
+                    const inventarioBajo = (p.cantidad ?? 0) <= INVENTARIO_BAJO_UMBRAL;
+                    return (
+                      <tr key={p.id} className={p.activo === false ? 'opacity-50' : ''}>
+                        <td>
+                          <div className="fw-semibold">{p.descripcion}</div>
+                          <small className="text-muted">#{p.codigo}</small>
+                          {p.activo === false && (
+                            <span className="badge bg-secondary ms-1" style={{ fontSize: '0.6rem' }}>Inactivo</span>
+                          )}
+                        </td>
+                        <td className="text-end">
+                          <span className={`fw-bold ${
+                            inventarioBajo
+                              ? (p.cantidad ?? 0) === 0 ? 'text-danger' : 'text-warning'
+                              : 'text-success'
+                          }`}>
+                            {p.cantidad ?? 0}
+                            {inventarioBajo && <i className="bi bi-exclamation-triangle-fill ms-1" style={{ fontSize: '0.7rem' }} />}
+                          </span>
+                        </td>
+                        <td className="text-end text-muted small">{p.precioCompra ? formatMoney(p.precioCompra) : '—'}</td>
+                        <td className="text-end text-success fw-semibold">{formatMoney(p.precio)}</td>
+                        <td className="text-center p-1">
+                          <button
+                            className="btn btn-sm btn-outline-primary"
+                            style={{ fontSize: '0.75rem' }}
+                            onClick={() => {
+                              setProductoCompra(p);
+                              setCostoCompra(p.precioCompra ? String(p.precioCompra) : '');
+                              setCantidadCompra('');
+                              setMostrarCompra(true);
+                            }}
+                          >
+                            <i className="bi bi-plus-circle me-1" />Comprar
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-fill d-flex align-items-center justify-content-center text-muted">
+            <div className="text-center">
+              <i className="bi bi-building fs-1 d-block mb-3 opacity-25" />
+              <h5>Selecciona un proveedor</h5>
+              <p className="small">Haz clic en un proveedor para ver sus productos</p>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* ── MODAL COMPRA ────────────────────────────────────────── */}
       {mostrarCompra && productoCompra && (
         <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
           <div className="modal-dialog modal-dialog-centered">

@@ -117,18 +117,22 @@ export default function Venta() {
 
   const cambio = useMemo(() => Math.max(pagoTotalMXN - total, 0), [pagoTotalMXN, total]);
 
+  // Sin restricción de stock: se puede agregar aunque el stock sea 0 o negativo
   const agregarAlCarrito = useCallback((producto) => {
-    const stock = producto.cantidad ?? 0;
-    if (stock <= 0) { alert('❌ Sin inventario disponible'); return; }
-    const enCarrito = venta.find((i) => i.id === producto.id)?.cantidad ?? 0;
-    if (enCarrito + 1 > stock) return;
     setVenta((prev) => {
       const existe = prev.find((i) => i.id === producto.id);
       if (existe) return prev.map((i) => i.id === producto.id ? { ...i, cantidad: i.cantidad + 1 } : i);
-      return [...prev, { id: producto.id, descripcion: producto.descripcion, codigo: producto.codigo, precio: producto.precio, cantidad: 1, stock }];
+      return [...prev, {
+        id: producto.id,
+        descripcion: producto.descripcion,
+        codigo: producto.codigo,
+        precio: producto.precio,
+        cantidad: 1,
+        stock: producto.cantidad ?? 0,
+      }];
     });
     setBusquedaCodigo(''); setBusquedaNombre(''); setCodigoEscaneado('');
-  }, [venta]);
+  }, []);
 
   const quitarDelCarrito = useCallback((id) => setVenta(prev => prev.filter(item => item.id !== id)), []);
 
@@ -143,8 +147,8 @@ export default function Venta() {
     if (Number.isNaN(nuevaCantidad) || nuevaCantidad < 1) return;
     setVenta((prev) => prev.map((item) => {
       if (item.id !== id) return item;
-      const cantidadFinal = Math.min(nuevaCantidad, item.stock ?? 0);
-      return { ...item, cantidad: cantidadFinal, cantidadRaw: String(cantidadFinal) };
+      // Sin restricción de máximo por stock
+      return { ...item, cantidad: nuevaCantidad, cantidadRaw: String(nuevaCantidad) };
     }));
   }, []);
 
@@ -162,8 +166,6 @@ export default function Venta() {
     if (venta.length === 0) { alert('El carrito está vacío'); return false; }
     if (modoPrestamo && !cuentaSeleccionada) { alert('Selecciona el cliente para el fiado'); return false; }
     if (!modoPrestamo && modoPago !== 'TARJETA' && pagoTotalMXN < total) { alert('El pago no cubre el total'); return false; }
-    const invalido = venta.find(item => item.cantidad > (item.stock ?? 0));
-    if (invalido) { alert(`Cantidad excede stock: ${invalido.descripcion}`); return false; }
     return true;
   };
 
@@ -276,7 +278,7 @@ export default function Venta() {
         </div>
       )}
 
-      {/* LAYOUT PRINCIPAL — full width, tipo página (sin card wrapper) */}
+      {/* LAYOUT PRINCIPAL */}
       <div style={{
         display: 'flex',
         flexDirection: 'column',
@@ -286,7 +288,7 @@ export default function Venta() {
         gap: '8px',
       }}>
 
-        {/* HEADER COMPACTO */}
+        {/* HEADER */}
         <div
           className="rounded px-3 py-2 text-white d-flex align-items-center justify-content-between flex-shrink-0"
           style={{ background: 'linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%)', minHeight: '52px' }}
@@ -307,10 +309,10 @@ export default function Venta() {
           </div>
         </div>
 
-        {/* CUERPO — tres columnas cuando hay cobro, dos si fiado */}
+        {/* CUERPO */}
         <div style={{ display: 'flex', gap: '12px', flex: 1, minHeight: 0 }}>
 
-          {/* COLUMNA IZQUIERDA — búsqueda + carrito */}
+          {/* COLUMNA IZQUIERDA */}
           <div style={{ flex: '1 1 55%', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
             <ProductoSearch
               busquedaCodigo={busquedaCodigo}
@@ -334,7 +336,7 @@ export default function Venta() {
             </div>
           </div>
 
-          {/* COLUMNA DERECHA — modo pago + cobro + total + botones */}
+          {/* COLUMNA DERECHA */}
           <div style={{
             flex: '0 0 380px',
             display: 'flex',
@@ -343,7 +345,6 @@ export default function Venta() {
             minHeight: 0,
             overflowY: 'auto',
           }}>
-            {/* Selector fiado/contado */}
             <ModoPago modoPrestamo={modoPrestamo} setModoPrestamo={setModoPrestamo} />
 
             {modoPrestamo ? (
@@ -376,7 +377,7 @@ export default function Venta() {
               />
             )}
 
-            {/* TOTAL + BOTONES — siempre al final de la columna, no al fondo de la pantalla */}
+            {/* TOTAL + BOTONES */}
             <div style={{ marginTop: 'auto', flexShrink: 0 }}>
               <div
                 className={`rounded p-3 mb-2 text-center ${modoPrestamo ? 'bg-warning-subtle border border-warning' : 'bg-success-subtle border border-success'}`}
@@ -397,7 +398,6 @@ export default function Venta() {
                 </div>
               </div>
 
-              {/* Botones acción — más grandes */}
               <div className="d-flex gap-2">
                 <button
                   className="btn btn-outline-secondary fw-bold"

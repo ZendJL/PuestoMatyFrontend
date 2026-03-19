@@ -34,7 +34,9 @@ export default function VentaTabla({
             {carrito.slice(0, pageSize).map((item) => {
               const rawVal = item.cantidadRaw !== undefined ? item.cantidadRaw : String(item.cantidad);
               const stock = item.stock ?? 0;
-              const excede = item.cantidad >= stock;
+              // Solo aviso visual si se vende más del stock registrado, pero no bloquea
+              const sinStock = stock <= 0;
+              const excedeStock = item.cantidad > stock;
               return (
                 <tr key={item.id} className="align-middle" style={{ height: '52px' }}>
                   <td>
@@ -45,19 +47,26 @@ export default function VentaTabla({
                   <td className="text-center">
                     <input
                       type="number"
-                      min="0"
-                      max={stock}
+                      min="1"
                       value={rawVal}
                       onChange={(e) => cambiarCantidad(item.id, e.target.value)}
                       onBlur={(e) => { if (e.target.value === '' || e.target.value === '0') cambiarCantidad(item.id, '1'); }}
-                      className={`form-control form-control-sm text-center mx-auto${excede ? ' border-warning' : ''}`}
+                      className={`form-control form-control-sm text-center mx-auto${excedeStock ? ' border-warning' : ''}`}
                       style={{ width: '60px' }}
                     />
                   </td>
                   <td className="text-center">
-                    <span className={`fw-semibold ${stock === 0 ? 'text-danger' : excede ? 'text-warning' : 'text-success'}`}>
-                      {stock}
-                    </span>
+                    {sinStock ? (
+                      <span className="badge bg-warning text-dark" title="Sin stock registrado — puede haber producto físico">
+                        ⚠️ {stock}
+                      </span>
+                    ) : excedeStock ? (
+                      <span className="badge bg-warning text-dark" title="Vendiendo más del stock registrado">
+                        ⚠️ {stock}
+                      </span>
+                    ) : (
+                      <span className="fw-semibold text-success">{stock}</span>
+                    )}
                   </td>
                   <td className="text-end fw-semibold text-success">{formatMoney(item.precio * item.cantidad)}</td>
                   <td className="text-center p-1">

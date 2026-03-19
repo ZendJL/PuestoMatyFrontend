@@ -250,214 +250,165 @@ export default function Merma() {
   );
 
   return (
-    <div className="d-flex justify-content-center">
-      <div className="card shadow-sm w-100" style={{ maxWidth: 'calc(100vw - 100px)', margin: '0.25rem 0' }}>
+    <div style={{ height: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-        {/* HEADER */}
-        <div className="card-header p-0 bg-danger text-white border-bottom-0">
-          <div className="d-flex align-items-center px-3 py-2">
-            <div className="flex-grow-1">
-              <div className="d-flex align-items-center gap-2">
-                <span style={{ fontSize: '1.3rem' }}>📦</span>
-                <div>
-                  <h6 className="mb-0 fw-bold" style={{ fontSize: '1rem' }}>Registro de Merma</h6>
-                  <small className="opacity-75" style={{ fontSize: '0.7rem' }}>
-                    {totalItems > 0
-                      ? `${itemsMerma.length} producto(s) \u00b7 ${totalItems} unidades`
-                      : 'Agrega productos para registrar merma'}
-                  </small>
-                </div>
-              </div>
-            </div>
-            {/* Costo estimado */}
-            <div className="text-end">
-              <div className="d-flex align-items-center gap-2">
-                {costoCargando && <div className="spinner-border spinner-border-sm text-warning" />}
-                <div>
-                  <div className="fw-bold text-warning" style={{ fontSize: '1.6rem', lineHeight: 1 }}>
-                    {formatMoney(costoEstimado)}
-                  </div>
-                  <small className="opacity-75" style={{ fontSize: '0.65rem' }}>costo estimado</small>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Chips de resumen — solo cuando hay items, con texto oscuro legible */}
-          {totalItems > 0 && (
-            <div className="d-flex flex-wrap gap-2 px-3 pb-2">
-              <span className="badge text-white fw-semibold px-3 py-2"
-                style={{ background: 'rgba(0,0,0,0.25)', fontSize: '0.78rem' }}>
-                <i className="bi bi-box-seam me-1" />
-                {itemsMerma.length} producto{itemsMerma.length !== 1 ? 's' : ''}
-              </span>
-              <span className="badge text-white fw-semibold px-3 py-2"
-                style={{ background: 'rgba(0,0,0,0.25)', fontSize: '0.78rem' }}>
-                <i className="bi bi-stack me-1" />
-                {totalItems} unidad{totalItems !== 1 ? 'es' : ''}
-              </span>
-              <span className={`badge fw-semibold px-3 py-2 ${badgeTipo(tipoMerma)}`}
-                style={{ fontSize: '0.78rem' }}>
-                <i className="bi bi-tag-fill me-1" />
-                {labelTipo(tipoMerma)}
-              </span>
-            </div>
-          )}
+      {/* HEADER */}
+      <div className="bg-danger text-white px-3 py-2 d-flex justify-content-between align-items-center flex-shrink-0" style={{ minHeight: 54 }}>
+        <div>
+          <h5 className="mb-0 fw-bold">📦 Registro de Merma</h5>
+          <small className="opacity-75">
+            {totalItems > 0
+              ? `${itemsMerma.length} producto(s) \u00b7 ${totalItems} unidades \u00b7 ${costoCargando ? 'Calculando...' : formatMoney(costoEstimado)}`
+              : 'Agrega productos para registrar merma'}
+          </small>
         </div>
-
-        {/* BODY */}
-        <div className="card-body py-3">
-          <div className="row g-3">
-            <div className="col-lg-8">
-              <ProductoSearchMerma
-                busqueda={busqueda}
-                setBusqueda={setBusqueda}
-                tipoMerma={tipoMerma}
-                setTipoMerma={setTipoMerma}
-                descripcionMerma={descripcionMerma}
-                setDescripcionMerma={setDescripcionMerma}
-                inputBusquedaRef={inputBusquedaRef}
-                productosFiltrados={productosFiltrados}
-                agregarItemMerma={agregarItemMerma}
-                formatMoney={formatMoney}
-                codigoEscaneado={codigoEscaneado}
-              />
-              <MermaTabla
-                itemsMerma={itemsMerma}
-                cambiarCantidadItem={cambiarCantidadItem}
-                quitarItem={quitarItem}
-                pageSize={pageSize}
-                setPageSize={setPageSize}
-                formatMoney={formatMoney}
-              />
-            </div>
-
-            <div className="col-lg-4">
-              <ResumenMerma
-                totalItems={totalItems}
-                costoEstimado={costoEstimado}
-                costoCargando={costoCargando}
-                tipoMerma={tipoMerma}
-                labelTipo={labelTipo}
-                badgeTipo={badgeTipo}
-                formatMoney={formatMoney}
-              />
-
-              <div className="mt-3">
-                <button
-                  className={`btn w-100 mb-2 ${
-                    showReporte ? 'btn-info' : 'btn-outline-info'
-                  }`}
-                  onClick={() => setShowReporte(!showReporte)}
-                >
-                  <i className="bi bi-graph-up me-2" />
-                  {showReporte ? 'Ocultar reporte' : 'Ver reporte'}
-                </button>
-              </div>
-
-              {showReporte && (
-                <div className="card shadow-sm border-info">
-                  <div className="card-header bg-info bg-opacity-10 py-2">
-                    <div className="fw-semibold small mb-2">
-                      <i className="bi bi-calendar-range me-1" /> Filtrar por fecha
-                    </div>
-                    <div className="row g-1">
-                      <div className="col-6">
-                        <label className="form-label mb-1 text-muted" style={{ fontSize: '0.7rem' }}>Desde</label>
-                        <input type="date" className="form-control form-control-sm"
-                          value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} />
-                      </div>
-                      <div className="col-6">
-                        <label className="form-label mb-1 text-muted" style={{ fontSize: '0.7rem' }}>Hasta</label>
-                        <input type="date" className="form-control form-control-sm"
-                          value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="card-body p-2" style={{ maxHeight: '340px', overflowY: 'auto' }}>
-                    {loadingReporte ? (
-                      <div className="text-center py-3">
-                        <div className="spinner-border spinner-border-sm text-info me-2" />
-                        Cargando reporte...
-                      </div>
-                    ) : !Array.isArray(reporteMermas) || reporteMermas.length === 0 ? (
-                      <div className="text-muted text-center py-4">
-                        <i className="bi bi-inbox fs-2 d-block mb-2 opacity-50" />
-                        <div className="small">Sin mermas en este rango</div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="d-flex justify-content-between align-items-center p-2 mb-2 rounded bg-danger bg-opacity-10">
-                          <span className="small fw-semibold text-danger">{reporteMermas.length} registros</span>
-                          <span className="fw-bold text-danger">
-                            {formatMoney(reporteMermas.reduce((s, m) => s + (m?.costoTotal || 0), 0))}
-                          </span>
-                        </div>
-                        {reporteMermas.map((merma) => (
-                          <div key={merma?.id || Math.random()} className="border-bottom py-2">
-                            <div className="d-flex justify-content-between align-items-start">
-                              <div>
-                                <span className={`badge me-1 ${badgeTipo(merma?.tipoMerma)}`}
-                                  style={{ fontSize: '0.65rem' }}>
-                                  {labelTipo(merma?.tipoMerma || 'OTRO')}
-                                </span>
-                                <small className="text-muted">
-                                  {merma?.fecha ? new Date(merma.fecha).toLocaleDateString('es-MX') : '\u2014'}
-                                </small>
-                              </div>
-                              <span className="fw-bold text-danger small">
-                                {formatMoney(merma?.costoTotal || 0)}
-                              </span>
-                            </div>
-                            <div className="small text-muted mt-1">
-                              {(merma?.detalles?.length || 0)} producto(s)
-                              {merma?.motivoGeneral && ` \u00b7 ${merma.motivoGeneral}`}
-                            </div>
-                          </div>
-                        ))}
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
+        <div className="d-flex gap-2 align-items-center">
+          {costoCargando && <div className="spinner-border spinner-border-sm text-warning" />}
+          <button
+            className={`btn fw-bold ${showReporte ? 'btn-light' : 'btn-outline-light'}`}
+            onClick={() => setShowReporte(!showReporte)}
+          >
+            <i className="bi bi-graph-up me-2" />{showReporte ? 'Ocultar reporte' : 'Ver reporte'}
+          </button>
         </div>
-
-        {/* FOOTER */}
-        <div className="card-footer bg-body-tertiary py-3 border-top">
-          <div className="row g-2">
-            <div className="col-md-4">
-              <button className="btn btn-outline-secondary w-100" onClick={limpiar}>
-                <i className="bi bi-arrow-repeat me-2" />Limpiar lista
-              </button>
-            </div>
-            <div className="col-md-8">
-              <button
-                className={`btn w-100 fw-bold text-white shadow-sm ${
-                  totalItems === 0 ? 'btn-secondary' : 'btn-danger'
-                }`}
-                style={{ minHeight: '50px' }}
-                onClick={guardarMerma}
-                disabled={totalItems === 0}
-              >
-                <div className="d-flex align-items-center justify-content-center gap-2">
-                  <i className="bi bi-check-circle-fill fs-5" />
-                  <div>
-                    <div>Guardar Merma</div>
-                    {totalItems > 0 && (
-                      <div className="small opacity-90">
-                        {costoCargando ? 'Calculando...' : `Costo estimado: ${formatMoney(costoEstimado)}`}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </button>
-            </div>
-          </div>
-        </div>
-
       </div>
+
+      {/* CUERPO */}
+      <div className="flex-fill overflow-auto p-3">
+        <div className="row g-3">
+          <div className="col-lg-8">
+            <ProductoSearchMerma
+              busqueda={busqueda}
+              setBusqueda={setBusqueda}
+              tipoMerma={tipoMerma}
+              setTipoMerma={setTipoMerma}
+              descripcionMerma={descripcionMerma}
+              setDescripcionMerma={setDescripcionMerma}
+              inputBusquedaRef={inputBusquedaRef}
+              productosFiltrados={productosFiltrados}
+              agregarItemMerma={agregarItemMerma}
+              formatMoney={formatMoney}
+              codigoEscaneado={codigoEscaneado}
+            />
+            <MermaTabla
+              itemsMerma={itemsMerma}
+              cambiarCantidadItem={cambiarCantidadItem}
+              quitarItem={quitarItem}
+              pageSize={pageSize}
+              setPageSize={setPageSize}
+              formatMoney={formatMoney}
+            />
+          </div>
+
+          <div className="col-lg-4">
+            <ResumenMerma
+              totalItems={totalItems}
+              costoEstimado={costoEstimado}
+              costoCargando={costoCargando}
+              tipoMerma={tipoMerma}
+              labelTipo={labelTipo}
+              badgeTipo={badgeTipo}
+              formatMoney={formatMoney}
+            />
+
+            {showReporte && (
+              <div className="card shadow-sm border-info mt-3">
+                <div className="card-header bg-info bg-opacity-10 py-2">
+                  <div className="fw-semibold small mb-2">
+                    <i className="bi bi-calendar-range me-1" /> Filtrar por fecha
+                  </div>
+                  <div className="row g-1">
+                    <div className="col-6">
+                      <label className="form-label mb-1 text-muted" style={{ fontSize: '0.7rem' }}>Desde</label>
+                      <input type="date" className="form-control form-control-sm"
+                        value={fechaDesde} onChange={(e) => setFechaDesde(e.target.value)} />
+                    </div>
+                    <div className="col-6">
+                      <label className="form-label mb-1 text-muted" style={{ fontSize: '0.7rem' }}>Hasta</label>
+                      <input type="date" className="form-control form-control-sm"
+                        value={fechaHasta} onChange={(e) => setFechaHasta(e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+                <div className="card-body p-2" style={{ maxHeight: '340px', overflowY: 'auto' }}>
+                  {loadingReporte ? (
+                    <div className="text-center py-3">
+                      <div className="spinner-border spinner-border-sm text-info me-2" />
+                      Cargando reporte...
+                    </div>
+                  ) : !Array.isArray(reporteMermas) || reporteMermas.length === 0 ? (
+                    <div className="text-muted text-center py-4">
+                      <i className="bi bi-inbox fs-2 d-block mb-2 opacity-50" />
+                      <div className="small">Sin mermas en este rango</div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="d-flex justify-content-between align-items-center p-2 mb-2 rounded bg-danger bg-opacity-10">
+                        <span className="small fw-semibold text-danger">{reporteMermas.length} registros</span>
+                        <span className="fw-bold text-danger">
+                          {formatMoney(reporteMermas.reduce((s, m) => s + (m?.costoTotal || 0), 0))}
+                        </span>
+                      </div>
+                      {reporteMermas.map((merma) => (
+                        <div key={merma?.id || Math.random()} className="border-bottom py-2">
+                          <div className="d-flex justify-content-between align-items-start">
+                            <div>
+                              <span className={`badge me-1 ${badgeTipo(merma?.tipoMerma)}`}
+                                style={{ fontSize: '0.65rem' }}>
+                                {labelTipo(merma?.tipoMerma || 'OTRO')}
+                              </span>
+                              <small className="text-muted">
+                                {merma?.fecha ? new Date(merma.fecha).toLocaleDateString('es-MX') : '\u2014'}
+                              </small>
+                            </div>
+                            <span className="fw-bold text-danger small">
+                              {formatMoney(merma?.costoTotal || 0)}
+                            </span>
+                          </div>
+                          <div className="small text-muted mt-1">
+                            {(merma?.detalles?.length || 0)} producto(s)
+                            {merma?.motivoGeneral && ` \u00b7 ${merma.motivoGeneral}`}
+                          </div>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* FOOTER — botones */}
+      <div className="bg-body-tertiary border-top px-3 py-2 flex-shrink-0">
+        <div className="row g-2">
+          <div className="col-md-4">
+            <button className="btn btn-outline-secondary w-100" onClick={limpiar}>
+              <i className="bi bi-arrow-repeat me-2" />Limpiar lista
+            </button>
+          </div>
+          <div className="col-md-8">
+            <button
+              className={`btn w-100 fw-bold text-white shadow-sm ${
+                totalItems === 0 ? 'btn-secondary' : 'btn-danger'
+              }`}
+              style={{ minHeight: '44px' }}
+              onClick={guardarMerma}
+              disabled={totalItems === 0}
+            >
+              <i className="bi bi-check-circle-fill me-2" />
+              Guardar Merma
+              {totalItems > 0 && (
+                <span className="ms-2 opacity-90 fw-normal small">
+                  ({costoCargando ? 'Calculando...' : formatMoney(costoEstimado)})
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+
     </div>
   );
 }

@@ -117,7 +117,12 @@ export default function Venta() {
 
   const cambio = useMemo(() => Math.max(pagoTotalMXN - total, 0), [pagoTotalMXN, total]);
 
-  // Sin restricción de stock: se puede agregar aunque el stock sea 0 o negativo
+  // Productos en carrito con inventario insuficiente
+  const productosConInventarioInsuficiente = useMemo(() => {
+    return venta.filter(item => item.cantidad > (item.stock ?? 0));
+  }, [venta]);
+
+  // Sin restricción de inventario: se puede agregar aunque el inventario sea 0 o negativo
   const agregarAlCarrito = useCallback((producto) => {
     setVenta((prev) => {
       const existe = prev.find((i) => i.id === producto.id);
@@ -147,7 +152,6 @@ export default function Venta() {
     if (Number.isNaN(nuevaCantidad) || nuevaCantidad < 1) return;
     setVenta((prev) => prev.map((item) => {
       if (item.id !== id) return item;
-      // Sin restricción de máximo por stock
       return { ...item, cantidad: nuevaCantidad, cantidadRaw: String(nuevaCantidad) };
     }));
   }, []);
@@ -174,6 +178,17 @@ export default function Venta() {
   const confirmarVenta = async () => {
     setGuardando(true);
     try {
+      // Paso 1: Ajustar inventario automáticamente para productos con cantidad insuficiente
+      if (productosConInventarioInsuficiente.length > 0) {
+        await Promise.all(
+          productosConInventarioInsuficiente.map(item => {
+            const faltante = item.cantidad - (item.stock ?? 0);
+            return axios.post(`/api/productos/${item.id}/agregar-stock?cantidad=${faltante}&precioCompra=0`);
+          })
+        );
+      }
+
+      // Paso 2: Registrar la venta normalmente
       const ventaData = {
         fecha: new Date().toISOString(),
         cuentaId: modoPrestamo ? cuentaSeleccionada.id : null,
@@ -259,6 +274,33 @@ export default function Venta() {
                     </>
                   )}
                 </div>
+
+                {/* ALERTA INVENTARIO INSUFICIENTE — no bloqueante, solo informativa */}
+                {productosConInventarioInsuficiente.length > 0 && (
+                  <div className="alert alert-warning mb-0 mt-2" role="alert">
+                    <div className="fw-bold mb-1">⚠️ Inventario insuficiente detectado</div>
+                    <p className="mb-2" style={{ fontSize: '0.9rem' }}>
+                      Los siguientes productos no tienen suficiente inventario registrado.
+                      Al confirmar, el sistema <strong>agregará automáticamente</strong> lo
+                      faltante al inventario para cubrir esta venta:
+                    </p>
+                    <ul className="mb-0 ps-3" style={{ fontSize: '0.88rem' }}>
+                      {productosConInventarioInsuficiente.map(item => {
+                        const faltante = item.cantidad - (item.stock ?? 0);
+                        return (
+                          <li key={item.id}>
+                            <strong>{item.descripcion}</strong> — inventario actual:{' '}
+                            <span className="text-danger fw-bold">{item.stock ?? 0}</span>,
+                            cantidad a vender:{' '}
+                            <span className="fw-bold">{item.cantidad}</span>,
+                            se agregarán:{' '}
+                            <span className="text-success fw-bold">+{faltante}</span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                )}
               </div>
               <div className="modal-footer border-0 pt-0 gap-2">
                 <button className="btn btn-outline-secondary btn-lg flex-fill" onClick={() => setMostrarConfirmacion(false)} disabled={guardando}>
@@ -343,42 +385,9 @@ export default function Venta() {
             flexDirection: 'column',
             gap: '8px',
             minHeight: 0,
-            overflowY: 'auto',
           }}>
-            <ModoPago modoPrestamo={modoPrestamo} setModoPrestamo={setModoPrestamo} />
-
-            {modoPrestamo ? (
-              <CuentaPrestamo
-                cuentas={cuentas}
-                cuentaSeleccionada={cuentaSeleccionada}
-                setCuentaSeleccionada={setCuentaSeleccionada}
-                busquedaCuenta={busquedaCuenta}
-                setBusquedaCuenta={setBusquedaCuenta}
-                formatMoney={formatMoney}
-                cuentaData={cuentaSeleccionadaData}
-              />
-            ) : (
-              <CobroContado
-                pagoCliente={pagoCliente}
-                setPagoCliente={setPagoCliente}
-                cambio={cambio}
-                formatMoney={formatMoney}
-                DENOMINACIONES={DENOMINACIONES}
-                aplicarDenominacion={aplicarDenominacion}
-                total={total}
-                modoPago={modoPago}
-                setModoPago={setModoPago}
-                pagoDolares={pagoDolares}
-                setPagoDolares={setPagoDolares}
-                pagoMixtoPesos={pagoMixtoPesos}
-                setPayoMixtoPesos={setPayoMixtoPesos}
-                pagoMixtoDolares={pagoMixtoDolares}
-                setPagoMixtoDolares={setPagoMixtoDolares}
-              />
-            )}
-
-            {/* TOTAL + BOTONES */}
-            <div style={{ marginTop: 'auto', flexShrink: 0 }}>
+            {/* TOTAL + BOTONES — fijos arriba, fuera del scroll */}
+            <div style={{ flexShrink: 0 }}>
               <div
                 className={`rounded p-3 mb-2 text-center ${modoPrestamo ? 'bg-warning-subtle border border-warning' : 'bg-success-subtle border border-success'}`}
               >
@@ -420,6 +429,41 @@ export default function Venta() {
                   {modoPrestamo ? 'Fiado' : 'Cobrar'}
                 </button>
               </div>
+            </div>
+
+            {/* SECCIÓN SCROLLEABLE: modo pago + cobro/préstamo */}
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <ModoPago modoPrestamo={modoPrestamo} setModoPrestamo={setModoPrestamo} />
+
+              {modoPrestamo ? (
+                <CuentaPrestamo
+                  cuentas={cuentas}
+                  cuentaSeleccionada={cuentaSeleccionada}
+                  setCuentaSeleccionada={setCuentaSeleccionada}
+                  busquedaCuenta={busquedaCuenta}
+                  setBusquedaCuenta={setBusquedaCuenta}
+                  formatMoney={formatMoney}
+                  cuentaData={cuentaSeleccionadaData}
+                />
+              ) : (
+                <CobroContado
+                  pagoCliente={pagoCliente}
+                  setPagoCliente={setPagoCliente}
+                  cambio={cambio}
+                  formatMoney={formatMoney}
+                  DENOMINACIONES={DENOMINACIONES}
+                  aplicarDenominacion={aplicarDenominacion}
+                  total={total}
+                  modoPago={modoPago}
+                  setModoPago={setModoPago}
+                  pagoDolares={pagoDolares}
+                  setPagoDolares={setPagoDolares}
+                  pagoMixtoPesos={pagoMixtoPesos}
+                  setPayoMixtoPesos={setPayoMixtoPesos}
+                  pagoMixtoDolares={pagoMixtoDolares}
+                  setPagoMixtoDolares={setPagoMixtoDolares}
+                />
+              )}
             </div>
           </div>
         </div>

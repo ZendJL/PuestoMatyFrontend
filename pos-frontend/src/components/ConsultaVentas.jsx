@@ -72,154 +72,136 @@ export default function ConsultaVentas() {
 
   const detalle = Array.isArray(detalleRaw) ? detalleRaw : [];
 
-  if (isLoading) return <div>Cargando ventas...</div>;
-  if (error) return <div className="text-danger">Error al cargar ventas</div>;
+  if (isLoading) return <div className="text-center py-5 fs-5">Cargando ventas...</div>;
+  if (error) return <div className="text-danger text-center py-5">Error al cargar ventas</div>;
 
   return (
-    <div className="row g-3">
-      {/* Columna izquierda: lista de ventas */}
-      <div className="col-md-6">
-        <div className="card shadow-sm">
-          <div className="card-header py-2 d-flex justify-content-between align-items-center">
-            <h5 className="mb-0">Ventas</h5>
-            <span className="small text-muted">
-              {desde} a {hasta}
-            </span>
-          </div>
+    <div style={{ height: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-          <div className="card-body py-3">
-            <div className="row g-2 align-items-end mb-3">
-              <div className="col-auto">
-                <label className="form-label mb-1">Desde</label>
-                <input
-                  type="date"
-                  className="form-control form-control-sm"
-                  value={desde}
-                  onChange={(e) => setDesde(e.target.value)}
-                />
-              </div>
-              <div className="col-auto">
-                <label className="form-label mb-1">Hasta</label>
-                <input
-                  type="date"
-                  className="form-control form-control-sm"
-                  value={hasta}
-                  onChange={(e) => setHasta(e.target.value)}
-                />
-              </div>
-              <div className="col-auto">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-secondary"
-                  onClick={() => {
-                    const h = hoyRango();
-                    setDesde(formatoFechaInput(h.desde));
-                    setHasta(formatoFechaInput(h.hasta));
-                  }}
-                >
-                  Hoy
-                </button>
-              </div>
-              <div className="col small text-muted">
-                Máximo 10 ventas; haz clic en una para ver el detalle.
-              </div>
+      {/* ── HEADER ─────────────────────────────────────────────── */}
+      <div className="bg-success text-white px-3 py-2 d-flex justify-content-between align-items-center flex-shrink-0" style={{ minHeight: 54 }}>
+        <div>
+          <h5 className="mb-0 fw-bold">🧾 Consulta de Ventas</h5>
+          <small className="opacity-75">{ventasFiltradas.length} venta(s) en el rango · máx. 10</small>
+        </div>
+        <div className="d-flex gap-2 align-items-center flex-wrap">
+          <div className="d-flex gap-2 align-items-end">
+            <div>
+              <label className="form-label mb-1 text-white-50" style={{ fontSize: '0.75rem' }}>Desde</label>
+              <input
+                type="date"
+                className="form-control form-control-sm"
+                value={desde}
+                onChange={(e) => setDesde(e.target.value)}
+              />
             </div>
-
-            <div className="border rounded" style={{ maxHeight: 320, overflowY: 'auto' }}>
-              <table className="table table-sm table-hover mb-0">
-                <thead className="table-light sticky-top">
-                  <tr>
-                    <th style={{ width: 50 }}>ID</th>
-                    <th style={{ width: 130 }}>Fecha</th>
-                    <th style={{ width: 110 }}>Cuenta</th>
-                    <th style={{ width: 120 }}>Tipo pago</th>
-                    <th className="text-end" style={{ width: 90 }}>Total</th>
-                    <th className="text-center" style={{ width: 90 }}>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ventasFiltradas.map((v) => (
-                    <tr
-                      key={v.id}
-                      style={{ cursor: 'pointer' }}
-                      className={ventaSeleccionada?.id === v.id ? 'table-primary' : ''}
-                      onClick={() => setVentaSeleccionada(v)}
-                    >
-                      <td>{v.id}</td>
-                      <td className="small">
-                        {v.fecha?.replace('T', ' ').substring(0, 19)}
-                      </td>
-                      <td className="small">
-                        {v.status === 'PRESTAMO'
-                          ? v.cuenta?.nombre
-                            ? `${v.cuenta.nombre}`
-                            : v.cuentaId
-                            ? `Cuenta ${v.cuentaId}`
-                            : 'Préstamo'
-                          : '—'}
-                      </td>
-                      <td className="small">
-                        {v.tipoPago ? (
-                          <span className={`badge ${BADGE_PAGO[v.tipoPago] ?? 'bg-secondary-subtle text-secondary-emphasis'}`}>
-                            {ETIQUETA_PAGO[v.tipoPago] ?? v.tipoPago}
-                          </span>
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
-                      </td>
-                      <td className="text-end fw-semibold">
-                        ${v.total?.toFixed(2)}
-                      </td>
-                      <td className="text-center">
-                        <span className="badge bg-success-subtle text-success-emphasis border border-success-subtle">
-                          {v.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {ventasFiltradas.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="text-center text-muted py-3">
-                        No hay ventas en el rango seleccionado.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div>
+              <label className="form-label mb-1 text-white-50" style={{ fontSize: '0.75rem' }}>Hasta</label>
+              <input
+                type="date"
+                className="form-control form-control-sm"
+                value={hasta}
+                onChange={(e) => setHasta(e.target.value)}
+              />
             </div>
+            <button
+              type="button"
+              className="btn btn-light btn-sm fw-semibold"
+              onClick={() => {
+                const h = hoyRango();
+                setDesde(formatoFechaInput(h.desde));
+                setHasta(formatoFechaInput(h.hasta));
+              }}
+            >
+              Hoy
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Columna derecha: detalle de la venta */}
-      <div className="col-md-6">
-        <div className="card shadow-sm">
-          <div className="card-header py-2">
-            <h5 className="mb-0">
-              Detalle de venta{' '}
-              {ventaSeleccionada ? `#${ventaSeleccionada.id}` : ''}
-            </h5>
-          </div>
-          <div className="card-body py-3">
-            {!ventaSeleccionada && (
-              <div className="text-muted small">
-                Selecciona una venta de la lista para ver sus productos.
-              </div>
-            )}
+      {/* ── CUERPO 2 COLUMNAS ────────────────────────────────── */}
+      <div className="flex-fill d-flex overflow-hidden">
 
-            {ventaSeleccionada && (
-              <>
-                <div className="mb-2 small text-muted d-flex flex-wrap gap-3 align-items-center">
-                  <span>
-                    <strong>Fecha:</strong>{' '}
-                    {ventaSeleccionada.fecha?.replace('T', ' ').substring(0, 19)}
-                  </span>
-                  <span>
-                    <strong>Total:</strong>{' '}
-                    <span className="fw-semibold text-success">
-                      ${ventaSeleccionada.total?.toFixed(2)}
-                    </span>
-                  </span>
+        {/* COLUMNA IZQUIERDA: lista de ventas */}
+        <div
+          className="d-flex flex-column border-end"
+          style={{ width: ventaSeleccionada ? '52%' : '100%', minWidth: 320, transition: 'width 0.2s' }}
+        >
+          <div className="bg-body-tertiary border-bottom px-3 py-2 flex-shrink-0">
+            <span className="small text-muted">Haz clic en una venta para ver el detalle</span>
+          </div>
+          <div className="overflow-auto flex-fill">
+            <table className="table table-sm table-hover mb-0">
+              <thead className="table-light sticky-top">
+                <tr>
+                  <th style={{ width: 50 }}>ID</th>
+                  <th style={{ width: 150 }}>Fecha</th>
+                  <th style={{ width: 130 }}>Cuenta</th>
+                  <th style={{ width: 130 }}>Tipo pago</th>
+                  <th className="text-end" style={{ width: 100 }}>Total</th>
+                  <th className="text-center" style={{ width: 100 }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ventasFiltradas.map((v) => (
+                  <tr
+                    key={v.id}
+                    style={{ cursor: 'pointer' }}
+                    className={ventaSeleccionada?.id === v.id ? 'table-primary' : ''}
+                    onClick={() => setVentaSeleccionada(v)}
+                  >
+                    <td className="fw-semibold">{v.id}</td>
+                    <td className="small">{v.fecha?.replace('T', ' ').substring(0, 19)}</td>
+                    <td className="small">
+                      {v.status === 'PRESTAMO'
+                        ? v.cuenta?.nombre
+                          ? v.cuenta.nombre
+                          : v.cuentaId
+                          ? `Cuenta ${v.cuentaId}`
+                          : 'Préstamo'
+                        : '—'}
+                    </td>
+                    <td className="small">
+                      {v.tipoPago ? (
+                        <span className={`badge ${BADGE_PAGO[v.tipoPago] ?? 'bg-secondary-subtle text-secondary-emphasis'}`}>
+                          {ETIQUETA_PAGO[v.tipoPago] ?? v.tipoPago}
+                        </span>
+                      ) : (
+                        <span className="text-muted">—</span>
+                      )}
+                    </td>
+                    <td className="text-end fw-semibold text-success">${v.total?.toFixed(2)}</td>
+                    <td className="text-center">
+                      <span className="badge bg-success-subtle text-success-emphasis border border-success-subtle">
+                        {v.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {ventasFiltradas.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="text-center text-muted py-5">
+                      <i className="bi bi-inbox fs-1 d-block mb-2 opacity-50" />
+                      No hay ventas en el rango seleccionado.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* COLUMNA DERECHA: detalle de venta */}
+        {ventaSeleccionada && (
+          <div className="d-flex flex-column flex-fill overflow-hidden bg-body">
+
+            {/* Header detalle */}
+            <div className="px-3 py-2 border-bottom d-flex justify-content-between align-items-center bg-body-tertiary flex-shrink-0">
+              <div>
+                <h5 className="mb-0 fw-bold">🧾 Venta #{ventaSeleccionada.id}</h5>
+                <div className="small text-muted d-flex flex-wrap gap-3 mt-1">
+                  <span><strong>Fecha:</strong> {ventaSeleccionada.fecha?.replace('T', ' ').substring(0, 19)}</span>
+                  <span><strong>Total:</strong> <span className="fw-semibold text-success">${ventaSeleccionada.total?.toFixed(2)}</span></span>
                   {ventaSeleccionada.tipoPago && (
                     <span>
                       <strong>Pago:</strong>{' '}
@@ -229,66 +211,59 @@ export default function ConsultaVentas() {
                     </span>
                   )}
                 </div>
+              </div>
+              <button className="btn btn-outline-secondary" onClick={() => setVentaSeleccionada(null)}>
+                <i className="bi bi-x-lg" /> Cerrar
+              </button>
+            </div>
 
-                {loadingDetalle && (
-                  <div className="text-muted small">Cargando detalle...</div>
-                )}
-                {errorDetalle && (
-                  <div className="text-danger small">
-                    Error al cargar productos de la venta.
-                  </div>
-                )}
-
-                {!loadingDetalle && !errorDetalle && (
-                  <div
-                    className="border rounded small"
-                    style={{ maxHeight: 260, overflowY: 'auto' }}
-                  >
-                    <table className="table table-sm table-striped mb-0">
-                      <thead className="table-light sticky-top">
-                        <tr>
-                          <th>Producto</th>
-                          <th className="text-center" style={{ width: 70 }}>Cant.</th>
-                          <th className="text-end" style={{ width: 90 }}>Precio</th>
-                          <th className="text-end" style={{ width: 90 }}>Subtotal</th>
+            <div className="overflow-auto flex-fill">
+              {loadingDetalle && (
+                <div className="text-center py-4"><span className="spinner-border" /></div>
+              )}
+              {errorDetalle && (
+                <div className="text-danger text-center py-4">Error al cargar productos de la venta.</div>
+              )}
+              {!loadingDetalle && !errorDetalle && (
+                <table className="table table-sm table-striped mb-0">
+                  <thead className="table-light sticky-top">
+                    <tr>
+                      <th>Producto</th>
+                      <th className="text-center" style={{ width: 70 }}>Cant.</th>
+                      <th className="text-end" style={{ width: 100 }}>Precio</th>
+                      <th className="text-end" style={{ width: 100 }}>Subtotal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {detalle.map((vp) => {
+                      const precio = vp.precioUnitario ?? vp.producto?.precio ?? 0;
+                      const subtotal = precio * vp.cantidad;
+                      return (
+                        <tr key={vp.id}>
+                          <td className="text-truncate" style={{ maxWidth: 220 }}>
+                            {vp.producto?.descripcion || 'Producto'}
+                            <div className="small text-muted">Código: {vp.producto?.codigo}</div>
+                          </td>
+                          <td className="text-center fw-bold">{vp.cantidad}</td>
+                          <td className="text-end">${precio.toFixed(2)}</td>
+                          <td className="text-end fw-semibold text-success">${subtotal.toFixed(2)}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {detalle.map((vp) => {
-                          const precio = vp.precioUnitario ?? vp.producto?.precio ?? 0;
-                          const subtotal = precio * vp.cantidad;
-
-                          return (
-                            <tr key={vp.id}>
-                              <td className="text-truncate" style={{ maxWidth: 220 }}>
-                                {vp.producto?.descripcion || 'Producto'}
-                                <div className="small text-muted">
-                                  Código: {vp.producto?.codigo}
-                                </div>
-                              </td>
-                              <td className="text-center">{vp.cantidad}</td>
-                              <td className="text-end">${precio.toFixed(2)}</td>
-                              <td className="text-end fw-semibold text-success">
-                                ${subtotal.toFixed(2)}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                        {detalle.length === 0 && (
-                          <tr>
-                            <td colSpan={4} className="text-center text-muted py-3">
-                              Esta venta no tiene productos asociados.
-                            </td>
-                          </tr>
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </>
-            )}
+                      );
+                    })}
+                    {detalle.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="text-center text-muted py-5">
+                          <i className="bi bi-inbox fs-1 d-block mb-2 opacity-50" />
+                          Esta venta no tiene productos asociados.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

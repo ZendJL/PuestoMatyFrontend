@@ -95,10 +95,10 @@ export default function CobroContado({
               </button>
             ))}
           </div>
-          {cambio > 0 && (
-            <div className="p-2 rounded bg-success-subtle d-flex justify-content-between align-items-center mt-2">
-              <span className="fw-bold text-success">Cambio:</span>
-              <span className="fs-4 fw-bold text-success">{formatMoney(cambio)}</span>
+          {Number(pagoCliente) > 0 && cambio >= 0 && (
+            <div className={`p-2 rounded d-flex justify-content-between align-items-center mt-2 ${cambio === 0 ? 'bg-info-subtle' : 'bg-success-subtle'}`}>
+              <span className={`fw-bold ${cambio === 0 ? 'text-info' : 'text-success'}`}>Cambio:</span>
+              <span className={`fs-4 fw-bold ${cambio === 0 ? 'text-info' : 'text-success'}`}>{formatMoney(cambio)}</span>
             </div>
           )}
         </div>

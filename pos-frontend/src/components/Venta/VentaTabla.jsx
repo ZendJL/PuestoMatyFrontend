@@ -25,7 +25,7 @@ export default function VentaTabla({
               <th style={{ width: '38%' }} className="py-2">Producto</th>
               <th className="text-end py-2" style={{ width: '14%' }}>Precio</th>
               <th className="text-center py-2" style={{ width: '14%' }}>Cant.</th>
-              <th className="text-center py-2" style={{ width: '10%' }}>Stock</th>
+              <th className="text-center py-2" style={{ width: '10%' }}>Inventario</th>
               <th className="text-end py-2" style={{ width: '14%' }}>Subtotal</th>
               <th className="text-center py-2" style={{ width: '10%' }}>—</th>
             </tr>
@@ -34,7 +34,6 @@ export default function VentaTabla({
             {carrito.slice(0, pageSize).map((item) => {
               const rawVal = item.cantidadRaw !== undefined ? item.cantidadRaw : String(item.cantidad);
               const stock = item.stock ?? 0;
-              // Solo aviso visual si se vende más del stock registrado, pero no bloquea
               const sinStock = stock <= 0;
               const excedeStock = item.cantidad > stock;
               return (
@@ -57,11 +56,11 @@ export default function VentaTabla({
                   </td>
                   <td className="text-center">
                     {sinStock ? (
-                      <span className="badge bg-warning text-dark" title="Sin stock registrado — puede haber producto físico">
+                      <span className="badge bg-warning text-dark" title="Sin inventario registrado — puede haber producto físico">
                         ⚠️ {stock}
                       </span>
                     ) : excedeStock ? (
-                      <span className="badge bg-warning text-dark" title="Vendiendo más del stock registrado">
+                      <span className="badge bg-warning text-dark" title="Vendiendo más del inventario registrado">
                         ⚠️ {stock}
                       </span>
                     ) : (

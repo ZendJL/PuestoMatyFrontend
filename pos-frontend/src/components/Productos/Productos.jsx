@@ -240,7 +240,7 @@ export default function Productos() {
           if (producto) {
             seleccionarProducto(producto);
           } else {
-            if (confirm(`Código ${codigo} no encontrado.\n¿Agregar como nuevo producto?`)) {
+            if (confirm(`C\u00f3digo ${codigo} no encontrado.\n\u00bfAgregar como nuevo producto?`)) {
               setForm(prev => ({ ...prev, codigo }));
               setTabActiva('nuevo');
             }
@@ -305,7 +305,7 @@ export default function Productos() {
 
   const handleImprimirTodosGenerados = async () => {
     if (productosGenerados.length === 0) {
-      alert('No hay productos con códigos generados (99) para imprimir');
+      alert('No hay productos con c\u00f3digos generados (99) para imprimir');
       return;
     }
     try {
@@ -315,7 +315,7 @@ export default function Productos() {
       );
       await imprimirCodigosBarrasMasivo(ordenados);
     } catch {
-      alert('Error al preparar la impresión');
+      alert('Error al preparar la impresi\u00f3n');
     } finally {
       setImprimiendoTodos(false);
     }
@@ -367,7 +367,7 @@ export default function Productos() {
         cantidad: productoSeleccionado.cantidad,
       });
       queryClient.invalidateQueries({ queryKey: ['productos-altas'] });
-      alert('✅ Cambios guardados');
+      alert('\u2705 Cambios guardados');
     } catch (err) {
       alert('Error al guardar: ' + (err.response?.data?.message || err.message));
     }
@@ -381,467 +381,422 @@ export default function Productos() {
   };
 
   return (
-    <div className="d-flex justify-content-center">
-      <div className="w-100" style={{ maxWidth: 'calc(100vw - 48px)', margin: '0.4rem 0' }}>
-        <div className="card shadow border-0 overflow-hidden">
+    <div style={{ height: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-          {/* HEADER */}
-          <div
-            className="card-header text-white border-0 py-3"
-            style={{ background: 'linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%)' }}
+      {/* HEADER */}
+      <div
+        className="text-white px-3 py-2 d-flex justify-content-between align-items-center flex-shrink-0"
+        style={{ background: 'linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%)', minHeight: 54 }}
+      >
+        <div>
+          <h5 className="mb-0 fw-bold">
+            <span className="me-2" style={{ fontSize: '1.3rem' }}>\ud83d\udce6</span>
+            Gesti\u00f3n de Productos
+          </h5>
+          <small className="opacity-75">{totalProductos} total \u00b7 {productosActivos} activos</small>
+        </div>
+        <div className="d-flex align-items-center gap-3 flex-wrap">
+          <div className="form-check form-switch mb-0 text-white">
+            <input
+              className="form-check-input"
+              type="checkbox"
+              id="soloActivosCheck"
+              checked={soloActivos}
+              onChange={(e) => setSoloActivos(e.target.checked)}
+              style={{ width: '2.5em', height: '1.25em' }}
+            />
+            <label className="form-check-label fw-semibold ms-2" htmlFor="soloActivosCheck">
+              S\u00f3lo activos
+            </label>
+          </div>
+          <button
+            className="btn btn-light fw-semibold"
+            onClick={handleImprimirTodosGenerados}
+            disabled={imprimiendoTodos || productosGenerados.length === 0}
           >
-            <div className="row align-items-center g-2">
-              <div className="col-sm-4">
-                <h5 className="mb-0 fw-bold">
-                  <span className="me-2" style={{ fontSize: '1.3rem' }}>📦</span>
-                  Gestión de Productos
-                </h5>
+            {imprimiendoTodos
+              ? <><span className="spinner-border spinner-border-sm me-1" />Imprimiendo...</>
+              : <><i className="bi bi-printer-fill me-1" />C\u00f3digos ({productosGenerados.length})</>}
+          </button>
+        </div>
+      </div>
+
+      {/* ALERTA INVENTARIO BAJO */}
+      {productosStockBajo.length > 0 && (
+        <div className="flex-shrink-0 border-bottom">
+          <button
+            className="btn btn-warning w-100 rounded-0 d-flex align-items-center justify-content-between py-2 px-4 fw-bold"
+            style={{ fontSize: '1rem' }}
+            onClick={() => setMostrarStockBajo(!mostrarStockBajo)}
+          >
+            <span>
+              \u26a0\ufe0f {productosStockBajo.length} producto{productosStockBajo.length !== 1 ? 's' : ''} con inventario bajo (\u2264{STOCK_BAJO_UMBRAL})
+            </span>
+            <i className={`bi ${mostrarStockBajo ? 'bi-chevron-up' : 'bi-chevron-down'} fs-5`} />
+          </button>
+          {mostrarStockBajo && (
+            <div className="p-2 bg-warning bg-opacity-10" style={{ maxHeight: '260px', overflowY: 'auto' }}>
+              <table className="table table-sm table-hover mb-0" style={{ fontSize: '0.95rem' }}>
+                <thead className="table-warning sticky-top">
+                  <tr>
+                    <th>Producto</th>
+                    <th className="text-center" style={{ width: 100 }}>Inventario</th>
+                    <th className="text-center" style={{ width: 80 }}>Acci\u00f3n</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...productosStockBajo]
+                    .sort((a, b) => (a.cantidad ?? 0) - (b.cantidad ?? 0))
+                    .map(p => (
+                      <tr key={p.id} style={{ height: '48px' }}>
+                        <td className="align-middle">
+                          <div className="fw-semibold">{p.descripcion}</div>
+                          <small className="text-muted">#{p.codigo}</small>
+                        </td>
+                        <td className="text-center align-middle">
+                          <span className={`badge fs-6 px-3 py-2 ${inventarioBadge(p.cantidad)}`}>
+                            {p.cantidad ?? 0}
+                          </span>
+                        </td>
+                        <td className="text-center align-middle">
+                          <button
+                            className="btn btn-primary"
+                            onClick={() => { seleccionarProducto(p); setMostrarStockBajo(false); }}
+                          >
+                            Ver
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TABS */}
+      <div className="flex-shrink-0 border-bottom bg-body">
+        <ul className="nav nav-tabs nav-fill px-3 pt-2 mb-0">
+          {[
+            { key: 'nuevo', label: 'Agregar nuevo', icon: 'bi-plus-circle', color: 'text-success' },
+            { key: 'buscar', label: 'Buscar / Editar', icon: 'bi-search', color: 'text-primary' },
+          ].map(tab => (
+            <li className="nav-item" key={tab.key}>
+              <button
+                className={`nav-link fw-semibold fs-6 py-3 ${
+                  tabActiva === tab.key
+                    ? `active ${tab.color}`
+                    : 'text-secondary'
+                }`}
+                onClick={() => setTabActiva(tab.key)}
+              >
+                <i className={`bi ${tab.icon} me-2 fs-5`} />
+                {tab.label}
+                {tab.key === 'buscar' && productoSeleccionado && (
+                  <span className="badge bg-primary ms-2">1</span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* CUERPO */}
+      <div className="flex-fill overflow-auto p-4">
+
+        {/* TAB NUEVO */}
+        {tabActiva === 'nuevo' && (
+          <form onSubmit={handleSubmit}>
+            <div className="row g-3">
+
+              <div className="col-md-5">
+                <label className="form-label fw-semibold mb-1">C\u00f3digo *</label>
+                <div className="input-group">
+                  <input
+                    ref={inputCodigoRef}
+                    type="text"
+                    name="codigo"
+                    className="form-control form-control-lg"
+                    value={form.codigo}
+                    onChange={handleChange}
+                    placeholder="Escanear o escribir"
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline-success"
+                    onClick={handleGenerarCodigo}
+                    title="Generar c\u00f3digo interno"
+                  >
+                    <i className="bi bi-dice-5-fill me-1" />Generar
+                  </button>
+                </div>
+                <div className="text-muted mt-1" style={{ fontSize: '0.8rem' }}>C\u00f3digos internos: 99XXXXXXXX</div>
               </div>
-              <div className="col-sm-3 text-center">
-                <span className="fw-bold fs-4">{totalProductos}</span>
-                <span className="opacity-75 ms-2">total</span>
-                <span className="opacity-50 mx-1">·</span>
-                <span className="fw-semibold">{productosActivos}</span>
-                <span className="opacity-75 ms-1">activos</span>
+
+              <div className="col-md-7">
+                <label className="form-label fw-semibold mb-1">Descripci\u00f3n *</label>
+                <input
+                  type="text"
+                  name="descripcion"
+                  className="form-control form-control-lg"
+                  value={form.descripcion}
+                  onChange={handleChange}
+                  placeholder="Nombre del producto"
+                  required
+                />
               </div>
-              <div className="col-sm-5 d-flex justify-content-sm-end align-items-center gap-3 flex-wrap">
-                <div className="form-check form-switch mb-0 text-white">
+
+              <div className="col-md-3">
+                <label className="form-label fw-semibold mb-1">Precio de venta *</label>
+                <div className="input-group input-group-lg">
+                  <span className="input-group-text fw-bold">$</span>
+                  <input
+                    type="number"
+                    name="precio"
+                    className="form-control"
+                    step="0.01" min="0"
+                    value={form.precio}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="col-md-3">
+                <label className="form-label fw-semibold mb-1">Costo de compra</label>
+                <div className="input-group input-group-lg">
+                  <span className="input-group-text fw-bold">$</span>
+                  <input
+                    type="number"
+                    name="precioCompra"
+                    className="form-control"
+                    step="0.01" min="0"
+                    value={form.precioCompra}
+                    onChange={handleChange}
+                    placeholder="Opcional"
+                  />
+                </div>
+              </div>
+
+              <div className="col-md-2">
+                <label className="form-label fw-semibold mb-1">Cantidad inicial</label>
+                <input
+                  type="number"
+                  name="cantidad"
+                  className="form-control form-control-lg"
+                  min="0"
+                  value={form.cantidad}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+
+              <div className="col-md-4">
+                <label className="form-label fw-semibold mb-1">
+                  Proveedor <span className="text-muted fw-normal">(opcional)</span>
+                </label>
+                <ProveedorSelect
+                  value={form.proveedor}
+                  onChange={(val) => setForm(prev => ({ ...prev, proveedor: val }))}
+                  proveedoresExistentes={proveedoresExistentes}
+                />
+              </div>
+
+              <div className="col-12 d-flex align-items-center gap-4 flex-wrap pt-1">
+                <div className="form-check form-check-lg">
                   <input
                     className="form-check-input"
                     type="checkbox"
-                    id="soloActivosCheck"
-                    checked={soloActivos}
-                    onChange={(e) => setSoloActivos(e.target.checked)}
-                    style={{ width: '2.5em', height: '1.25em' }}
+                    name="imprimirCodigo"
+                    id="imprimirCodigo"
+                    checked={form.imprimirCodigo}
+                    onChange={handleChange}
+                    style={{ width: '1.4em', height: '1.4em' }}
                   />
-                  <label className="form-check-label fw-semibold ms-2" htmlFor="soloActivosCheck">
-                    Sólo activos
+                  <label className="form-check-label fw-semibold ms-2 fs-6" htmlFor="imprimirCodigo">
+                    Imprimir c\u00f3digo al guardar
                   </label>
                 </div>
+
                 <button
-                  className="btn btn-light fw-semibold"
-                  onClick={handleImprimirTodosGenerados}
-                  disabled={imprimiendoTodos || productosGenerados.length === 0}
+                  type="submit"
+                  className="btn btn-success btn-lg fw-bold px-5"
+                  disabled={guardando}
                 >
-                  {imprimiendoTodos
-                    ? <><span className="spinner-border spinner-border-sm me-1" />Imprimiendo...</>
-                    : <><i className="bi bi-printer-fill me-1" />Códigos ({productosGenerados.length})</>}
+                  {guardando
+                    ? <><span className="spinner-border spinner-border-sm me-2" />Guardando...</>
+                    : <><i className="bi bi-save-fill me-2" />Guardar producto</>}
                 </button>
               </div>
-            </div>
-          </div>
 
-          {/* ALERTA INVENTARIO BAJO */}
-          {productosStockBajo.length > 0 && (
-            <div className="border-bottom">
-              <button
-                className="btn btn-warning w-100 rounded-0 d-flex align-items-center justify-content-between py-3 px-4 fw-bold"
-                style={{ fontSize: '1rem' }}
-                onClick={() => setMostrarStockBajo(!mostrarStockBajo)}
-              >
-                <span>
-                  ⚠️ {productosStockBajo.length} producto{productosStockBajo.length !== 1 ? 's' : ''} con inventario bajo (≤{STOCK_BAJO_UMBRAL})
-                </span>
-                <i className={`bi ${mostrarStockBajo ? 'bi-chevron-up' : 'bi-chevron-down'} fs-5`} />
-              </button>
-              {mostrarStockBajo && (
-                <div className="p-2 bg-warning bg-opacity-10" style={{ maxHeight: '260px', overflowY: 'auto' }}>
-                  <table className="table table-sm table-hover mb-0" style={{ fontSize: '0.95rem' }}>
-                    <thead className="table-warning sticky-top">
+            </div>
+          </form>
+        )}
+
+        {/* TAB BUSCAR / EDITAR */}
+        {tabActiva === 'buscar' && (
+          <div>
+            <div className="row g-2 mb-3">
+              <div className="col-md-6">
+                <label className="form-label fw-semibold mb-1">Buscar por c\u00f3digo o descripci\u00f3n</label>
+                <input
+                  ref={inputBusquedaRef}
+                  type="text"
+                  className="form-control form-control-lg"
+                  placeholder="Escribe o escanea..."
+                  value={busquedaProducto}
+                  onChange={(e) => {
+                    setBusquedaProducto(e.target.value);
+                    if (!e.target.value.trim()) limpiarSeleccion();
+                  }}
+                  autoFocus
+                />
+                {codigoEscaneado && (
+                  <div className="alert alert-info py-2 mt-2 mb-0">
+                    <i className="bi bi-upc-scan me-2" />
+                    Escaneando: <strong className="fs-5">{codigoEscaneado}</strong>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {!productoSeleccionado && (
+              <div className="border rounded mb-3" style={{ maxHeight: '380px', overflowY: 'auto' }}>
+                {!busquedaProducto.trim() ? (
+                  <div className="text-center text-muted py-5">
+                    <i className="bi bi-upc-scan fs-1 d-block mb-3 opacity-50" />
+                    <div className="fs-5">Escribe para buscar o escanea un c\u00f3digo</div>
+                  </div>
+                ) : productosFiltrados.length === 0 ? (
+                  <div className="text-center text-muted py-5">
+                    <i className="bi bi-search fs-1 d-block mb-3 opacity-50" />
+                    <div className="fs-5">Sin resultados para "<strong>{busquedaProducto}</strong>"</div>
+                  </div>
+                ) : (
+                  <table className="table table-hover mb-0" style={{ fontSize: '1rem' }}>
+                    <thead className="table-light sticky-top">
                       <tr>
-                        <th style={{ fontSize: '0.95rem' }}>Producto</th>
-                        <th className="text-center" style={{ width: 100, fontSize: '0.95rem' }}>Inventario</th>
-                        <th className="text-center" style={{ width: 80, fontSize: '0.95rem' }}>Acción</th>
+                        <th className="py-3">Descripci\u00f3n</th>
+                        <th className="py-3">C\u00f3digo</th>
+                        <th className="py-3">Proveedor</th>
+                        <th className="text-end py-3">Precio</th>
+                        <th className="text-center py-3">Inventario</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {[...productosStockBajo]
-                        .sort((a, b) => (a.cantidad ?? 0) - (b.cantidad ?? 0))
-                        .map(p => (
-                          <tr key={p.id} style={{ height: '48px' }}>
-                            <td className="align-middle">
-                              <div className="fw-semibold">{p.descripcion}</div>
-                              <small className="text-muted">#{p.codigo}</small>
-                            </td>
-                            <td className="text-center align-middle">
-                              <span className={`badge fs-6 px-3 py-2 ${inventarioBadge(p.cantidad)}`}>
-                                {p.cantidad ?? 0}
-                              </span>
-                            </td>
-                            <td className="text-center align-middle">
-                              <button
-                                className="btn btn-primary"
-                                onClick={() => { seleccionarProducto(p); setMostrarStockBajo(false); }}
-                              >
-                                Ver
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                      {productosFiltrados.map(p => (
+                        <tr
+                          key={p.id}
+                          onClick={() => seleccionarProducto(p)}
+                          style={{ cursor: 'pointer', height: '56px' }}
+                          className="align-middle"
+                        >
+                          <td className="fw-semibold fs-6">{p.descripcion}</td>
+                          <td className="text-muted">{p.codigo}</td>
+                          <td className="text-muted">{p.proveedor || '\u2014'}</td>
+                          <td className="text-end fw-bold">${Number(p.precio || 0).toFixed(2)}</td>
+                          <td className="text-center">
+                            <span className={`badge fs-6 px-3 py-2 ${inventarioBadge(p.cantidad)}`}>
+                              {p.cantidad ?? 0}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
 
-          <div className="card-body p-0">
-            {/* TABS */}
-            <ul className="nav nav-tabs nav-fill border-bottom px-3 pt-2 mb-0">
-              {[
-                { key: 'nuevo', label: 'Agregar nuevo', icon: 'bi-plus-circle', color: 'text-success' },
-                { key: 'buscar', label: 'Buscar / Editar', icon: 'bi-search', color: 'text-primary' },
-              ].map(tab => (
-                <li className="nav-item" key={tab.key}>
-                  <button
-                    className={`nav-link fw-semibold fs-6 py-3 ${
-                      tabActiva === tab.key
-                        ? `active ${tab.color}`
-                        : 'text-secondary'
-                    }`}
-                    onClick={() => setTabActiva(tab.key)}
-                  >
-                    <i className={`bi ${tab.icon} me-2 fs-5`} />
-                    {tab.label}
-                    {tab.key === 'buscar' && productoSeleccionado && (
-                      <span className="badge bg-primary ms-2">1</span>
-                    )}
+            {productoSeleccionado && (
+              <div>
+                <div className="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+                  <div>
+                    <h5 className="mb-1 fw-bold">{productoSeleccionado.descripcion}</h5>
+                    <span className="text-muted me-3">#{productoSeleccionado.codigo}</span>
+                    <span className={`fw-semibold fs-5 ${
+                      (productoSeleccionado.cantidad ?? 0) <= STOCK_BAJO_UMBRAL ? 'text-danger' : 'text-success'
+                    }`}>
+                      {productoSeleccionado.cantidad ?? 0} en inventario
+                    </span>
+                  </div>
+                  <button className="btn btn-outline-secondary btn-lg" onClick={limpiarSeleccion}>
+                    <i className="bi bi-x-lg me-2" />Cambiar producto
                   </button>
-                </li>
-              ))}
-            </ul>
-
-            <div className="p-4">
-
-              {/* TAB NUEVO */}
-              {tabActiva === 'nuevo' && (
-                <form onSubmit={handleSubmit}>
-                  <div className="row g-3">
-
-                    <div className="col-md-5">
-                      <label className="form-label fw-semibold mb-1">Código *</label>
-                      <div className="input-group">
-                        <input
-                          ref={inputCodigoRef}
-                          type="text"
-                          name="codigo"
-                          className="form-control form-control-lg"
-                          value={form.codigo}
-                          onChange={handleChange}
-                          placeholder="Escanear o escribir"
-                          required
-                        />
-                        <button
-                          type="button"
-                          className="btn btn-outline-success"
-                          onClick={handleGenerarCodigo}
-                          title="Generar código interno"
-                        >
-                          <i className="bi bi-dice-5-fill me-1" />Generar
-                        </button>
-                      </div>
-                      <div className="text-muted mt-1" style={{ fontSize: '0.8rem' }}>Códigos internos: 99XXXXXXXX</div>
-                    </div>
-
-                    <div className="col-md-7">
-                      <label className="form-label fw-semibold mb-1">Descripción *</label>
-                      <input
-                        type="text"
-                        name="descripcion"
-                        className="form-control form-control-lg"
-                        value={form.descripcion}
-                        onChange={handleChange}
-                        placeholder="Nombre del producto"
-                        required
-                      />
-                    </div>
-
-                    <div className="col-md-3">
-                      <label className="form-label fw-semibold mb-1">Precio de venta *</label>
-                      <div className="input-group input-group-lg">
-                        <span className="input-group-text fw-bold">$</span>
-                        <input
-                          type="number"
-                          name="precio"
-                          className="form-control"
-                          step="0.01" min="0"
-                          value={form.precio}
-                          onChange={handleChange}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="col-md-3">
-                      <label className="form-label fw-semibold mb-1">Costo de compra</label>
-                      <div className="input-group input-group-lg">
-                        <span className="input-group-text fw-bold">$</span>
-                        <input
-                          type="number"
-                          name="precioCompra"
-                          className="form-control"
-                          step="0.01" min="0"
-                          value={form.precioCompra}
-                          onChange={handleChange}
-                          placeholder="Opcional"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="col-md-2">
-                      <label className="form-label fw-semibold mb-1">Cantidad inicial</label>
-                      <input
-                        type="number"
-                        name="cantidad"
-                        className="form-control form-control-lg"
-                        min="0"
-                        value={form.cantidad}
-                        onChange={handleChange}
-                        required
-                      />
-                    </div>
-
-                    <div className="col-md-4">
-                      <label className="form-label fw-semibold mb-1">
-                        Proveedor <span className="text-muted fw-normal">(opcional)</span>
-                      </label>
-                      <ProveedorSelect
-                        value={form.proveedor}
-                        onChange={(val) => setForm(prev => ({ ...prev, proveedor: val }))}
-                        proveedoresExistentes={proveedoresExistentes}
-                      />
-                    </div>
-
-                    <div className="col-12 d-flex align-items-center gap-4 flex-wrap pt-1">
-                      <div className="form-check form-check-lg">
-                        <input
-                          className="form-check-input"
-                          type="checkbox"
-                          name="imprimirCodigo"
-                          id="imprimirCodigo"
-                          checked={form.imprimirCodigo}
-                          onChange={handleChange}
-                          style={{ width: '1.4em', height: '1.4em' }}
-                        />
-                        <label className="form-check-label fw-semibold ms-2 fs-6" htmlFor="imprimirCodigo">
-                          Imprimir código al guardar
-                        </label>
-                      </div>
-
-                      <button
-                        type="submit"
-                        className="btn btn-success btn-lg fw-bold px-5"
-                        disabled={guardando}
-                      >
-                        {guardando
-                          ? <><span className="spinner-border spinner-border-sm me-2" />Guardando...</>
-                          : <><i className="bi bi-save-fill me-2" />Guardar producto</>}
-                      </button>
-                    </div>
-
-                  </div>
-                </form>
-              )}
-
-              {/* TAB BUSCAR / EDITAR */}
-              {tabActiva === 'buscar' && (
-                <div>
-                  <div className="row g-2 mb-3">
-                    <div className="col-md-6">
-                      <label className="form-label fw-semibold mb-1">Buscar por código o descripción</label>
-                      <input
-                        ref={inputBusquedaRef}
-                        type="text"
-                        className="form-control form-control-lg"
-                        placeholder="Escribe o escanea..."
-                        value={busquedaProducto}
-                        onChange={(e) => {
-                          setBusquedaProducto(e.target.value);
-                          if (!e.target.value.trim()) limpiarSeleccion();
-                        }}
-                        autoFocus
-                      />
-                      {codigoEscaneado && (
-                        <div className="alert alert-info py-2 mt-2 mb-0">
-                          <i className="bi bi-upc-scan me-2" />
-                          Escaneando: <strong className="fs-5">{codigoEscaneado}</strong>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Lista de resultados */}
-                  {!productoSeleccionado && (
-                    <div className="border rounded mb-3" style={{ maxHeight: '380px', overflowY: 'auto' }}>
-                      {!busquedaProducto.trim() ? (
-                        <div className="text-center text-muted py-5">
-                          <i className="bi bi-upc-scan fs-1 d-block mb-3 opacity-50" />
-                          <div className="fs-5">Escribe para buscar o escanea un código</div>
-                        </div>
-                      ) : productosFiltrados.length === 0 ? (
-                        <div className="text-center text-muted py-5">
-                          <i className="bi bi-search fs-1 d-block mb-3 opacity-50" />
-                          <div className="fs-5">Sin resultados para "<strong>{busquedaProducto}</strong>"</div>
-                        </div>
-                      ) : (
-                        <table className="table table-hover mb-0" style={{ fontSize: '1rem' }}>
-                          <thead className="table-light sticky-top">
-                            <tr>
-                              <th className="py-3">Descripción</th>
-                              <th className="py-3">Código</th>
-                              <th className="py-3">Proveedor</th>
-                              <th className="text-end py-3">Precio</th>
-                              <th className="text-center py-3">Inventario</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {productosFiltrados.map(p => (
-                              <tr
-                                key={p.id}
-                                onClick={() => seleccionarProducto(p)}
-                                style={{ cursor: 'pointer', height: '56px' }}
-                                className="align-middle"
-                              >
-                                <td className="fw-semibold fs-6">{p.descripcion}</td>
-                                <td className="text-muted">{p.codigo}</td>
-                                <td className="text-muted">{p.proveedor || '—'}</td>
-                                <td className="text-end fw-bold">${Number(p.precio || 0).toFixed(2)}</td>
-                                <td className="text-center">
-                                  <span className={`badge fs-6 px-3 py-2 ${inventarioBadge(p.cantidad)}`}>
-                                    {p.cantidad ?? 0}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Panel edición */}
-                  {productoSeleccionado && (
-                    <div>
-                      <div className="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
-                        <div>
-                          <h5 className="mb-1 fw-bold">{productoSeleccionado.descripcion}</h5>
-                          <span className="text-muted me-3">#{productoSeleccionado.codigo}</span>
-                          <span className={`fw-semibold fs-5 ${
-                            (productoSeleccionado.cantidad ?? 0) <= STOCK_BAJO_UMBRAL ? 'text-danger' : 'text-success'
-                          }`}>
-                            {productoSeleccionado.cantidad ?? 0} en inventario
-                          </span>
-                        </div>
-                        <button className="btn btn-outline-secondary btn-lg" onClick={limpiarSeleccion}>
-                          <i className="bi bi-x-lg me-2" />Cambiar producto
-                        </button>
-                      </div>
-
-                      <div className="row g-3 mb-4">
-                        <div className="col-md-3">
-                          <label className="form-label fw-semibold mb-1">Código</label>
-                          <input
-                            type="text"
-                            className="form-control form-control-lg"
-                            value={codigoEdit}
-                            onChange={(e) => setCodigoEdit(e.target.value)}
-                          />
-                        </div>
-
-                        <div className="col-md-5">
-                          <label className="form-label fw-semibold mb-1">Descripción</label>
-                          <input
-                            type="text"
-                            className="form-control form-control-lg"
-                            value={descripcionEdit}
-                            onChange={(e) => setDescripcionEdit(e.target.value)}
-                          />
-                        </div>
-
-                        <div className="col-md-2">
-                          <label className="form-label fw-semibold mb-1">Precio de venta</label>
-                          <div className="input-group input-group-lg">
-                            <span className="input-group-text">$</span>
-                            <input
-                              type="number"
-                              className="form-control"
-                              min="0" step="0.01"
-                              value={precioEdit}
-                              onChange={(e) => setPrecioEdit(e.target.value)}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="col-md-2">
-                          <label className="form-label fw-semibold mb-1">Costo de compra</label>
-                          <div className="input-group input-group-lg">
-                            <span className="input-group-text">$</span>
-                            <input
-                              type="number"
-                              className="form-control"
-                              min="0" step="0.01"
-                              value={precioCompraEdit}
-                              onChange={(e) => setPrecioCompraEdit(e.target.value)}
-                            />
-                          </div>
-                        </div>
-
-                        <div className="col-md-4">
-                          <label className="form-label fw-semibold mb-1">
-                            Proveedor <span className="text-muted fw-normal">(opcional)</span>
-                          </label>
-                          <ProveedorSelect
-                            value={proveedorEdit}
-                            onChange={setProveedorEdit}
-                            proveedoresExistentes={proveedoresExistentes}
-                          />
-                        </div>
-
-                        <div className="col-md-4 d-flex align-items-end pb-1">
-                          <div className="form-check form-switch">
-                            <input
-                              className="form-check-input"
-                              type="checkbox"
-                              id="activoEdit"
-                              checked={activoEdit}
-                              onChange={(e) => setActivoEdit(e.target.checked)}
-                              style={{ width: '2.5em', height: '1.25em' }}
-                            />
-                            <label className="form-check-label fw-semibold fs-6 ms-2" htmlFor="activoEdit">
-                              Producto activo
-                            </label>
-                          </div>
-                        </div>
-
-                        <div className="col-md-4 d-flex align-items-end">
-                          <button className="btn btn-primary btn-lg fw-bold w-100" onClick={handleGuardarCambios}>
-                            <i className="bi bi-save2-fill me-2" />Guardar cambios
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="border-top pt-4">
-                        <p className="fw-bold mb-3 fs-6 text-uppercase text-muted">
-                          <i className="bi bi-box-arrow-in-down me-2" />Agregar al inventario
-                        </p>
-                        <ProductosPanel
-                          productoSeleccionado={productoSeleccionado}
-                          cantidadAgregar={cantidadAgregar}
-                          setCantidadAgregar={setCantidadAgregar}
-                          precioCompraAgregar={precioCompraAgregar}
-                          setPrecioCompraAgregar={setPrecioCompraAgregar}
-                          limpiarSeleccion={limpiarSeleccion}
-                          setProductoSeleccionado={setProductoSeleccionado}
-                        />
-                      </div>
-                    </div>
-                  )}
                 </div>
-              )}
 
-            </div>
+                <div className="row g-3 mb-4">
+                  <div className="col-md-3">
+                    <label className="form-label fw-semibold mb-1">C\u00f3digo</label>
+                    <input type="text" className="form-control form-control-lg" value={codigoEdit}
+                      onChange={(e) => setCodigoEdit(e.target.value)} />
+                  </div>
+                  <div className="col-md-5">
+                    <label className="form-label fw-semibold mb-1">Descripci\u00f3n</label>
+                    <input type="text" className="form-control form-control-lg" value={descripcionEdit}
+                      onChange={(e) => setDescripcionEdit(e.target.value)} />
+                  </div>
+                  <div className="col-md-2">
+                    <label className="form-label fw-semibold mb-1">Precio de venta</label>
+                    <div className="input-group input-group-lg">
+                      <span className="input-group-text">$</span>
+                      <input type="number" className="form-control" min="0" step="0.01"
+                        value={precioEdit} onChange={(e) => setPrecioEdit(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="col-md-2">
+                    <label className="form-label fw-semibold mb-1">Costo de compra</label>
+                    <div className="input-group input-group-lg">
+                      <span className="input-group-text">$</span>
+                      <input type="number" className="form-control" min="0" step="0.01"
+                        value={precioCompraEdit} onChange={(e) => setPrecioCompraEdit(e.target.value)} />
+                    </div>
+                  </div>
+                  <div className="col-md-4">
+                    <label className="form-label fw-semibold mb-1">
+                      Proveedor <span className="text-muted fw-normal">(opcional)</span>
+                    </label>
+                    <ProveedorSelect value={proveedorEdit} onChange={setProveedorEdit}
+                      proveedoresExistentes={proveedoresExistentes} />
+                  </div>
+                  <div className="col-md-4 d-flex align-items-end pb-1">
+                    <div className="form-check form-switch">
+                      <input className="form-check-input" type="checkbox" id="activoEdit"
+                        checked={activoEdit} onChange={(e) => setActivoEdit(e.target.checked)}
+                        style={{ width: '2.5em', height: '1.25em' }} />
+                      <label className="form-check-label fw-semibold fs-6 ms-2" htmlFor="activoEdit">
+                        Producto activo
+                      </label>
+                    </div>
+                  </div>
+                  <div className="col-md-4 d-flex align-items-end">
+                    <button className="btn btn-primary btn-lg fw-bold w-100" onClick={handleGuardarCambios}>
+                      <i className="bi bi-save2-fill me-2" />Guardar cambios
+                    </button>
+                  </div>
+                </div>
+
+                <div className="border-top pt-4">
+                  <p className="fw-bold mb-3 fs-6 text-uppercase text-muted">
+                    <i className="bi bi-box-arrow-in-down me-2" />Agregar al inventario
+                  </p>
+                  <ProductosPanel
+                    productoSeleccionado={productoSeleccionado}
+                    cantidadAgregar={cantidadAgregar}
+                    setCantidadAgregar={setCantidadAgregar}
+                    precioCompraAgregar={precioCompraAgregar}
+                    setPrecioCompraAgregar={setPrecioCompraAgregar}
+                    limpiarSeleccion={limpiarSeleccion}
+                    setProductoSeleccionado={setProductoSeleccionado}
+                  />
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        )}
+
       </div>
     </div>
   );

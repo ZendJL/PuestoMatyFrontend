@@ -14,6 +14,7 @@ export default function CobroContado({
   aplicarDenominacion, total, modoPago, setModoPago,
   pagoDolares, setPagoDolares, pagoMixtoPesos, setPayoMixtoPesos,
   pagoMixtoDolares, setPagoMixtoDolares,
+  pagoMixtoTarjeta, setPagoMixtoTarjeta,
 }) {
   const { tasaCambio, setTasaCambio } = useTasaCambio();
   const [tasaInput, setTasaInput] = useState(String(tasaCambio));
@@ -48,7 +49,7 @@ export default function CobroContado({
         </div>
       </div>
 
-      {/* SELECTOR MODO DE PAGO — más grande */}
+      {/* SELECTOR MODO DE PAGO */}
       <div>
         <label className="form-label fw-semibold mb-1" style={{ fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: 1 }}>Forma de pago</label>
         <div className="btn-group w-100" role="group">
@@ -146,7 +147,7 @@ export default function CobroContado({
         </div>
       )}
 
-      {/* PAGO MIXTO */}
+      {/* PAGO MIXTO — pesos + dólares + tarjeta */}
       {modoPago === MODO_PAGO.MIXTO && (
         <div>
           <div className="mb-2">
@@ -168,8 +169,19 @@ export default function CobroContado({
               <small className="text-muted mt-1 d-block">= {formatMoney(Number(pagoMixtoDolares) * tasaCambio)} MXN</small>
             )}
           </div>
+          <div className="mb-2">
+            <label className="form-label fw-semibold mb-1">Tarjeta (MXN)</label>
+            <div className="input-group input-group-lg">
+              <span className="input-group-text bg-info text-white fw-bold">💳</span>
+              <input type="number" min="0" step="0.01" className="form-control"
+                value={pagoMixtoTarjeta} onChange={(e) => setPagoMixtoTarjeta(e.target.value)} placeholder="0.00" />
+            </div>
+          </div>
           {(() => {
-            const totalPagadoMXN = Number(pagoMixtoPesos) + Number(pagoMixtoDolares) * tasaCambio;
+            const totalPagadoMXN =
+              (Number(pagoMixtoPesos) || 0) +
+              (Number(pagoMixtoDolares) || 0) * tasaCambio +
+              (Number(pagoMixtoTarjeta) || 0);
             const falta = total - totalPagadoMXN;
             const cambioMixto = totalPagadoMXN - total;
             return falta > 0.009 ? (

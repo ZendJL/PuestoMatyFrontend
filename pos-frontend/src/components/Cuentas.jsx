@@ -12,6 +12,30 @@ const ETIQUETA_PAGO = {
   TARJETA: { label: '💳 Tarjeta',  color: 'info' },
 };
 
+/**
+ * Calcula vendido y pagado desde el último abono que dejó el saldo en $0.
+ * Si nunca hubo corte, toma todo el historial.
+ */
+function calcularDesdeUltimoCorte(ultimosAbonos = [], ultimasVentas = []) {
+  // Buscar el abono más reciente que dejó nuevoSaldo === 0
+  const abonosOrdenados = [...ultimosAbonos].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  const ultimoCorte = abonosOrdenados.find(a => (a.nuevoSaldo || 0) === 0);
+  const fechaCorte = ultimoCorte ? new Date(ultimoCorte.fecha) : null;
+
+  const ventasDesdeCorte = fechaCorte
+    ? ultimasVentas.filter(v => new Date(v.fecha) > fechaCorte)
+    : ultimasVentas;
+
+  const abonosDesdeCorte = fechaCorte
+    ? ultimosAbonos.filter(a => new Date(a.fecha) > fechaCorte)
+    : ultimosAbonos;
+
+  const vendido = ventasDesdeCorte.reduce((s, v) => s + (v.totalVenta || 0), 0);
+  const pagado  = abonosDesdeCorte.reduce((s, a) => s + (a.cantidad || 0), 0);
+
+  return { vendido, pagado, fechaCorte, numVentas: ventasDesdeCorte.length };
+}
+
 export default function Cuentas() {
   const [busqueda, setBusqueda] = useState('');
   const [cuentaExpandida, setCuentaExpandida] = useState(null);
@@ -111,6 +135,12 @@ export default function Cuentas() {
     saldoTotal: datosFiltrados.reduce((s, c) => s + (c?.saldo || 0), 0),
   }), [datosFiltrados]);
 
+  // Resumen desde último corte para el panel derecho
+  const resumenCorte = useMemo(() => {
+    if (!detalleCuenta) return null;
+    return calcularDesdeUltimoCorte(detalleCuenta.ultimosAbonos, detalleCuenta.ultimasVentas);
+  }, [detalleCuenta]);
+
   const handleAbono = () => {
     const monto = parseFloat(montoAbono);
     if (isNaN(monto) || monto <= 0) return alert('Monto inválido');
@@ -153,7 +183,7 @@ export default function Cuentas() {
   return (
     <div style={{ height: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-      {/* ── HEADER ────────────────────────────────────────────────── */}
+      {/* HEADER */}
       <div className="bg-primary text-white px-3 py-2 d-flex justify-content-between align-items-center flex-shrink-0" style={{ minHeight: 54 }}>
         <div>
           <h5 className="mb-0 fw-bold">💰 Cuentas por Cobrar</h5>
@@ -164,7 +194,7 @@ export default function Cuentas() {
         </button>
       </div>
 
-      {/* ── FORM NUEVO CLIENTE ──────────────────────────────────────*/}
+      {/* FORM NUEVO CLIENTE */}
       {mostrarNuevoCliente && (
         <div className="bg-success-subtle border-bottom px-3 py-3 flex-shrink-0">
           <div className="row g-3 align-items-end">
@@ -193,7 +223,7 @@ export default function Cuentas() {
         </div>
       )}
 
-      {/* ── BARRA FILTROS ────────────────────────────────────────── */}
+      {/* BARRA FILTROS */}
       <div className="bg-body-tertiary border-bottom px-3 py-2 d-flex gap-3 align-items-center flex-shrink-0 flex-wrap">
         <div style={{ flex: '1 1 260px', maxWidth: 360 }}>
           <div className="input-group">
@@ -220,11 +250,11 @@ export default function Cuentas() {
         </div>
       </div>
 
-      {/* ── CUERPO 2 COLUMNAS ────────────────────────────────────── */}
+      {/* CUERPO 2 COLUMNAS */}
       <div className="flex-fill d-flex overflow-hidden">
 
         {/* COLUMNA IZQUIERDA: tabla de clientes */}
-        <div className="d-flex flex-column border-end" style={{ width: cuentaExpandida ? '42%' : '100%', minWidth: 320, transition: 'width 0.2s' }}>
+        <div className="d-flex flex-column border-end" style={{ width: cuentaExpandida ? '38%' : '100%', minWidth: 280, transition: 'width 0.2s' }}>
           {datosFiltrados.length === 0 ? (
             <div className="text-center text-muted p-5">
               <i className="bi bi-inbox fs-1 d-block mb-2 opacity-50" />
@@ -261,13 +291,14 @@ export default function Cuentas() {
                       </div>
                     ),
                   },
-                  { id: 'totalVentas', header: 'Ventas', style: { width: 70 }, align: 'center', sortable: true, render: c => c?.totalVentas || 0 },
-                  { id: 'totalFacturado', header: 'Vendido', style: { width: 110 }, align: 'right', sortable: true,
-                    render: c => <span className="fw-semibold text-success">{formatMoney(c?.totalFacturado || 0)}</span> },
-                  { id: 'totalPagado', header: 'Pagado', style: { width: 110 }, align: 'right', sortable: true,
-                    render: c => <span className="fw-semibold text-primary">{formatMoney(c?.totalPagado || 0)}</span> },
-                  { id: 'saldo', header: 'Saldo', style: { width: 110 }, align: 'right', sortable: true,
-                    render: c => <span className={`fw-bold fs-6 ${(c?.saldo || 0) > 0 ? 'text-danger' : 'text-success'}`}>{formatMoney(c?.saldo || 0)}</span> },
+                  {
+                    id: 'saldo', header: 'Saldo', style: { width: 120 }, align: 'right', sortable: true,
+                    render: c => (
+                      <span className={`fw-bold fs-6 ${(c?.saldo || 0) > 0 ? 'text-danger' : 'text-success'}`}>
+                        {formatMoney(c?.saldo || 0)}
+                      </span>
+                    ),
+                  },
                   {
                     id: 'acciones', header: '', style: { width: 80 }, align: 'center',
                     render: c => editandoCliente !== c?.id ? (
@@ -310,6 +341,35 @@ export default function Cuentas() {
                 <div className="text-center py-4"><span className="spinner-border" /></div>
               ) : detalleCuenta ? (
                 <>
+                  {/* RESUMEN DESDE ÚLTIMO CORTE */}
+                  {resumenCorte && (
+                    <div className="card mb-3 border-0 bg-body-tertiary">
+                      <div className="card-body py-2 px-3">
+                        <div className="d-flex gap-4 flex-wrap align-items-center">
+                          <div className="text-center">
+                            <div className="small text-muted fw-semibold text-uppercase">Vendido</div>
+                            <div className="fs-5 fw-bold text-danger">{formatMoney(resumenCorte.vendido)}</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="small text-muted fw-semibold text-uppercase">Pagado</div>
+                            <div className="fs-5 fw-bold text-success">{formatMoney(resumenCorte.pagado)}</div>
+                          </div>
+                          <div className="text-center">
+                            <div className="small text-muted fw-semibold text-uppercase">Ventas</div>
+                            <div className="fs-5 fw-bold text-primary">{resumenCorte.numVentas}</div>
+                          </div>
+                          <div className="ms-auto text-end">
+                            <div className="small text-muted">
+                              {resumenCorte.fechaCorte
+                                ? <>Desde corte del <strong>{formatFecha(resumenCorte.fechaCorte)}</strong></>
+                                : <span className="text-warning fw-semibold">Sin corte previo — historial completo</span>}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* ABONO */}
                   {(cuentaExpandida.saldo || 0) > 0 && (
                     <div className="card mb-3 border-warning">
@@ -374,13 +434,17 @@ export default function Cuentas() {
                             {detalleCuenta.ultimosAbonos.map(a => {
                               const tp = a?.tipoPago || 'PESOS';
                               const meta = ETIQUETA_PAGO[tp] || { label: tp, color: 'secondary' };
+                              const esCorte = (a?.nuevoSaldo || 0) === 0;
                               return (
-                                <tr key={a?.id}>
+                                <tr key={a?.id} className={esCorte ? 'table-success' : ''}>
                                   <td className="fw-bold text-success">{formatMoney(a?.cantidad || 0)}</td>
                                   <td>{formatMoney(a?.viejoSaldo || 0)}</td>
                                   <td className="fw-bold text-primary">{formatMoney(a?.nuevoSaldo || 0)}</td>
                                   <td><span className={`badge bg-${meta.color}-subtle text-${meta.color}-emphasis border border-${meta.color}-subtle`}>{meta.label}</span></td>
-                                  <td><small className="text-muted">{formatFecha(a?.fecha)}</small></td>
+                                  <td>
+                                    <small className="text-muted">{formatFecha(a?.fecha)}</small>
+                                    {esCorte && <span className="badge bg-success ms-1" style={{fontSize:'0.6rem'}}>✂ Corte</span>}
+                                  </td>
                                   <td><button className="btn btn-sm btn-outline-secondary" onClick={() => imprimirRecibo(a, cuentaExpandida, tp)} title="Recibo"><i className="bi bi-printer" />Imprimir</button></td>
                                 </tr>
                               );

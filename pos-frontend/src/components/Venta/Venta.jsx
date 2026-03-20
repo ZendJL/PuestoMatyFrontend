@@ -19,26 +19,42 @@ const ETIQUETA_MODO_PAGO = {
   MIXTO:   '🔀 Mixto (pesos + dólares)',
 };
 
+// Estado vacío de cobro — reutilizable para venta principal y split
+const COBRO_INICIAL = {
+  modoPago: 'PESOS',
+  modoPrestamo: false,
+  cuentaSeleccionada: null,
+  busquedaCuenta: '',
+  pagoCliente: '',
+  pagoDolares: '',
+  pagoMixtoPesos: '',
+  pagoMixtoDolares: '',
+  pagoMixtoTarjeta: '',
+};
+
 export default function Venta() {
   const [venta, setVenta] = useState([]);
   const [busquedaCodigo, setBusquedaCodigo] = useState('');
   const [busquedaNombre, setBusquedaNombre] = useState('');
   const [codigoEscaneado, setCodigoEscaneado] = useState('');
-  const [modoPrestamo, setModoPrestamo] = useState(false);
-  const [cuentaSeleccionada, setCuentaSeleccionada] = useState(null);
-  const [busquedaCuenta, setBusquedaCuenta] = useState('');
-  const [pagoCliente, setPagoCliente] = useState('');
   const [pageSize] = useState(20);
   const [mostrarConfirmacion, setMostrarConfirmacion] = useState(false);
   const [guardando, setGuardando] = useState(false);
 
-  const { tasaCambio } = useTasaCambio();
-  const [modoPago, setModoPago] = useState('PESOS');
-  const [pagoDolares, setPagoDolares] = useState('');
-  const [pagoMixtoPesos, setPayoMixtoPesos] = useState('');
-  const [pagoMixtoDolares, setPagoMixtoDolares] = useState('');
-  const [pagoMixtoTarjeta, setPagoMixtoTarjeta] = useState('');
+  // Cobro principal
+  const [cobro, setCobro] = useState(COBRO_INICIAL);
+  const setCobVal = (key, val) => setCobro(prev => ({ ...prev, [key]: val }));
 
+  // ── SPLIT ────────────────────────────────────────────────────────────────────
+  const [modoSplit, setModoSplit] = useState(false);
+  const [seleccionados, setSeleccionados] = useState(new Set());
+  const [mostrarConfirmacionSplit, setMostrarConfirmacionSplit] = useState(false);
+  const [guardandoSplit, setGuardandoSplit] = useState(false);
+  const [cobroSplit, setCobroSplit] = useState(COBRO_INICIAL);
+  const setSplitVal = (key, val) => setCobroSplit(prev => ({ ...prev, [key]: val }));
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  const { tasaCambio } = useTasaCambio();
   const queryClient = useQueryClient();
 
   const { data: productosRaw, isLoading, error } = useQuery({
@@ -51,17 +67,17 @@ export default function Venta() {
     queryKey: ['cuentas-optimizadas-pos'],
     queryFn: () => axios.get('/api/cuentas/optimizadas-pos').then(res => res.data),
     staleTime: 10 * 60 * 1000,
-    enabled: modoPrestamo,
+    enabled: cobro.modoPrestamo || cobroSplit.modoPrestamo,
   });
 
   const productos = Array.isArray(productosRaw) ? productosRaw : productosRaw?.content || [];
   const cuentas = Array.isArray(cuentasRaw) ? cuentasRaw : [];
 
+  // ── Escáner ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     const bufferEscaner = { current: '' };
     let timerEscaner = null;
     let escaneando = false;
-
     const handleEscaneo = (e) => {
       const elementoActivo = document.activeElement;
       if (elementoActivo?.type === 'number' || elementoActivo?.tagName === 'TEXTAREA') {
@@ -87,15 +103,20 @@ export default function Venta() {
       clearTimeout(timerEscaner);
       timerEscaner = setTimeout(() => { bufferEscaner.current = ''; escaneando = false; setCodigoEscaneado(''); }, 300);
     };
-
     window.addEventListener('keydown', handleEscaneo, true);
     return () => { window.removeEventListener('keydown', handleEscaneo, true); clearTimeout(timerEscaner); };
   }, [productos]);
 
+  // ── Helpers carrito ──────────────────────────────────────────────────────────
   const cuentaSeleccionadaData = useMemo(() => {
-    if (!cuentaSeleccionada?.id || !cuentas.length) return null;
-    return cuentas.find(c => c.id === cuentaSeleccionada.id) || null;
-  }, [cuentaSeleccionada?.id, cuentas]);
+    if (!cobro.cuentaSeleccionada?.id || !cuentas.length) return null;
+    return cuentas.find(c => c.id === cobro.cuentaSeleccionada.id) || null;
+  }, [cobro.cuentaSeleccionada?.id, cuentas]);
+
+  const cuentaSplitData = useMemo(() => {
+    if (!cobroSplit.cuentaSeleccionada?.id || !cuentas.length) return null;
+    return cuentas.find(c => c.id === cobroSplit.cuentaSeleccionada.id) || null;
+  }, [cobroSplit.cuentaSeleccionada?.id, cuentas]);
 
   const productosFiltrados = useMemo(() => {
     if (codigoEscaneado.length > 0 || (busquedaCodigo && busquedaCodigo.trim())) return [];
@@ -106,28 +127,34 @@ export default function Venta() {
     return [];
   }, [busquedaCodigo, busquedaNombre, productos, codigoEscaneado]);
 
-  const total = useMemo(() => venta.reduce((sum, item) => sum + item.precio * item.cantidad, 0), [venta]);
+  const total = useMemo(() => venta.reduce((sum, i) => sum + i.precio * i.cantidad, 0), [venta]);
 
-  const pagoTotalMXN = useMemo(() => {
-    if (modoPago === 'PESOS')   return Number(pagoCliente) || 0;
-    if (modoPago === 'DOLARES') return (Number(pagoDolares) || 0) * tasaCambio;
-    if (modoPago === 'TARJETA') return total;
-    if (modoPago === 'MIXTO')   return (
-      (Number(pagoMixtoPesos) || 0) +
-      (Number(pagoMixtoDolares) || 0) * tasaCambio +
-      (Number(pagoMixtoTarjeta) || 0)
+  // Ítems seleccionados para split
+  const itemsSplit = useMemo(() => venta.filter(i => seleccionados.has(i.id)), [venta, seleccionados]);
+  const totalSplit = useMemo(() => itemsSplit.reduce((s, i) => s + i.precio * i.cantidad, 0), [itemsSplit]);
+
+  const calcPagoMXN = (c, tot) => {
+    if (c.modoPago === 'PESOS')   return Number(c.pagoCliente) || 0;
+    if (c.modoPago === 'DOLARES') return (Number(c.pagoDolares) || 0) * tasaCambio;
+    if (c.modoPago === 'TARJETA') return tot;
+    if (c.modoPago === 'MIXTO')   return (
+      (Number(c.pagoMixtoPesos) || 0) +
+      (Number(c.pagoMixtoDolares) || 0) * tasaCambio +
+      (Number(c.pagoMixtoTarjeta) || 0)
     );
     return 0;
-  }, [modoPago, pagoCliente, pagoDolares, pagoMixtoPesos, pagoMixtoDolares, pagoMixtoTarjeta, tasaCambio, total]);
+  };
 
-  const cambio = useMemo(() => Math.max(pagoTotalMXN - total, 0), [pagoTotalMXN, total]);
+  const pagoTotalMXN = useMemo(() => calcPagoMXN(cobro, total), [cobro, total, tasaCambio]);
+  const pagoSplitMXN = useMemo(() => calcPagoMXN(cobroSplit, totalSplit), [cobroSplit, totalSplit, tasaCambio]);
+  const cambio      = useMemo(() => Math.max(pagoTotalMXN - total, 0), [pagoTotalMXN, total]);
+  const cambioSplit = useMemo(() => Math.max(pagoSplitMXN - totalSplit, 0), [pagoSplitMXN, totalSplit]);
 
-  // Productos en carrito con inventario insuficiente
-  const productosConInventarioInsuficiente = useMemo(() => {
-    return venta.filter(item => item.cantidad > (item.stock ?? 0));
-  }, [venta]);
+  const productosConInventarioInsuficiente = useMemo(
+    () => venta.filter(item => item.cantidad > (item.stock ?? 0)),
+    [venta]
+  );
 
-  // Sin restricción de inventario: se puede agregar aunque el inventario sea 0 o negativo
   const agregarAlCarrito = useCallback((producto) => {
     setVenta((prev) => {
       const existe = prev.find((i) => i.id === producto.id);
@@ -144,7 +171,10 @@ export default function Venta() {
     setBusquedaCodigo(''); setBusquedaNombre(''); setCodigoEscaneado('');
   }, []);
 
-  const quitarDelCarrito = useCallback((id) => setVenta(prev => prev.filter(item => item.id !== id)), []);
+  const quitarDelCarrito = useCallback((id) => {
+    setVenta(prev => prev.filter(item => item.id !== id));
+    setSeleccionados(prev => { const s = new Set(prev); s.delete(id); return s; });
+  }, []);
 
   const cambiarCantidad = useCallback((id, nuevaCantidadRaw) => {
     if (nuevaCantidadRaw === '' || nuevaCantidadRaw === '0') {
@@ -161,58 +191,98 @@ export default function Venta() {
     }));
   }, []);
 
-  const aplicarDenominacion = useCallback((monto) => setPagoCliente(String(monto.toFixed(2))), []);
-
-  const limpiarVenta = useCallback(() => {
-    setVenta([]); setModoPrestamo(false); setCuentaSeleccionada(null);
-    setBusquedaCuenta(''); setBusquedaCodigo(''); setBusquedaNombre('');
-    setCodigoEscaneado(''); setPagoCliente(''); setPagoDolares('');
-    setPayoMixtoPesos(''); setPagoMixtoDolares(''); setPagoMixtoTarjeta(''); setModoPago('PESOS');
-    setMostrarConfirmacion(false);
+  const toggleSeleccion = useCallback((id) => {
+    setSeleccionados(prev => {
+      const s = new Set(prev);
+      s.has(id) ? s.delete(id) : s.add(id);
+      return s;
+    });
   }, []);
 
-  const validarVenta = () => {
-    if (venta.length === 0) { alert('El carrito está vacío'); return false; }
-    if (modoPrestamo && !cuentaSeleccionada) { alert('Selecciona el cliente para el fiado'); return false; }
-    if (!modoPrestamo && modoPago !== 'TARJETA' && pagoTotalMXN < total) { alert('El pago no cubre el total'); return false; }
+  const toggleTodosSeleccionados = useCallback(() => {
+    setSeleccionados(prev =>
+      prev.size === venta.length ? new Set() : new Set(venta.map(i => i.id))
+    );
+  }, [venta]);
+
+  const cancelarSplit = useCallback(() => {
+    setModoSplit(false);
+    setSeleccionados(new Set());
+    setCobroSplit(COBRO_INICIAL);
+    setMostrarConfirmacionSplit(false);
+  }, []);
+
+  const limpiarVenta = useCallback(() => {
+    setVenta([]);
+    setCobro(COBRO_INICIAL);
+    setBusquedaCodigo(''); setBusquedaNombre(''); setCodigoEscaneado('');
+    setMostrarConfirmacion(false);
+    cancelarSplit();
+  }, [cancelarSplit]);
+
+  // ── Validaciones ─────────────────────────────────────────────────────────────
+  const validarCobro = (c, items, tot) => {
+    if (items.length === 0) { alert('No hay productos seleccionados'); return false; }
+    if (c.modoPrestamo && !c.cuentaSeleccionada) { alert('Selecciona el cliente para el fiado'); return false; }
+    if (!c.modoPrestamo && c.modoPago !== 'TARJETA' && calcPagoMXN(c, tot) < tot) {
+      alert('El pago no cubre el total'); return false;
+    }
     return true;
   };
 
-  const handleCobrar = () => { if (!validarVenta()) return; setMostrarConfirmacion(true); };
+  const handleCobrar = () => {
+    if (!validarCobro(cobro, venta, total)) return;
+    setMostrarConfirmacion(true);
+  };
+
+  const handleCobrarSplit = () => {
+    if (seleccionados.size === 0) { alert('Selecciona al menos un producto'); return; }
+    if (!validarCobro(cobroSplit, itemsSplit, totalSplit)) return;
+    setMostrarConfirmacionSplit(true);
+  };
+
+  // ── Confirmar venta genérica ─────────────────────────────────────────────────
+  const ejecutarVenta = async (items, c, tot) => {
+    const insuficientes = items.filter(item => item.cantidad > (item.stock ?? 0));
+    if (insuficientes.length > 0) {
+      await Promise.all(
+        insuficientes.map(item => {
+          const faltante = item.cantidad - (item.stock ?? 0);
+          return axios.post(`/api/productos/${item.id}/agregar-stock?cantidad=${faltante}&precioCompra=0`);
+        })
+      );
+    }
+    const ventaData = {
+      fecha: new Date().toISOString(),
+      cuentaId: c.modoPrestamo ? c.cuentaSeleccionada.id : null,
+      total: tot,
+      status: c.modoPrestamo ? 'PRESTAMO' : 'COMPLETADA',
+      pagoCliente: c.modoPrestamo ? null : calcPagoMXN(c, tot),
+      tipoPago: c.modoPrestamo ? 'CREDITO' : c.modoPago,
+      ventaProductos: items.map(item => ({
+        producto: { id: item.id, descripcion: item.descripcion },
+        cantidad: item.cantidad,
+        precioUnitario: item.precio,
+      })),
+    };
+    const respuesta = await axios.post('/api/ventas', ventaData);
+    return { ventaGuardada: respuesta.data, infoCobro: c };
+  };
 
   const confirmarVenta = async () => {
     setGuardando(true);
     try {
-      // Paso 1: Ajustar inventario automáticamente para productos con cantidad insuficiente
-      if (productosConInventarioInsuficiente.length > 0) {
-        await Promise.all(
-          productosConInventarioInsuficiente.map(item => {
-            const faltante = item.cantidad - (item.stock ?? 0);
-            return axios.post(`/api/productos/${item.id}/agregar-stock?cantidad=${faltante}&precioCompra=0`);
-          })
-        );
-      }
-
-      // Paso 2: Registrar la venta normalmente
-      const ventaData = {
-        fecha: new Date().toISOString(),
-        cuentaId: modoPrestamo ? cuentaSeleccionada.id : null,
-        total,
-        status: modoPrestamo ? 'PRESTAMO' : 'COMPLETADA',
-        pagoCliente: modoPrestamo ? null : pagoTotalMXN,
-        tipoPago: modoPrestamo ? 'CREDITO' : modoPago,
-        ventaProductos: venta.map(item => ({
-          producto: { id: item.id, descripcion: item.descripcion },
-          cantidad: item.cantidad,
-          precioUnitario: item.precio,
-        })),
-      };
-      const respuesta = await axios.post('/api/ventas', ventaData);
-      const ventaGuardada = respuesta.data;
+      const { ventaGuardada, infoCobro } = await ejecutarVenta(venta, cobro, total);
       setMostrarConfirmacion(false);
       if (window.confirm('¿Imprimir ticket?')) {
         imprimirTicketVenta(ventaGuardada.id, {
-          infoPago: { modoPago, tasaCambio, pagoDolares, pagoMixtoPesos, pagoMixtoDolares, pagoMixtoTarjeta }
+          infoPago: {
+            modoPago: infoCobro.modoPago, tasaCambio,
+            pagoDolares: infoCobro.pagoDolares,
+            pagoMixtoPesos: infoCobro.pagoMixtoPesos,
+            pagoMixtoDolares: infoCobro.pagoMixtoDolares,
+            pagoMixtoTarjeta: infoCobro.pagoMixtoTarjeta,
+          }
         });
       }
       limpiarVenta();
@@ -228,111 +298,153 @@ export default function Venta() {
     }
   };
 
+  const confirmarSplit = async () => {
+    setGuardandoSplit(true);
+    try {
+      const { ventaGuardada, infoCobro } = await ejecutarVenta(itemsSplit, cobroSplit, totalSplit);
+      setMostrarConfirmacionSplit(false);
+
+      if (window.confirm('¿Imprimir ticket de esta parte?')) {
+        imprimirTicketVenta(ventaGuardada.id, {
+          infoPago: {
+            modoPago: infoCobro.modoPago, tasaCambio,
+            pagoDolares: infoCobro.pagoDolares,
+            pagoMixtoPesos: infoCobro.pagoMixtoPesos,
+            pagoMixtoDolares: infoCobro.pagoMixtoDolares,
+            pagoMixtoTarjeta: infoCobro.pagoMixtoTarjeta,
+          }
+        });
+      }
+
+      // Quitar ítems cobrados del carrito principal
+      const idsCobrados = new Set(itemsSplit.map(i => i.id));
+      setVenta(prev => prev.filter(i => !idsCobrados.has(i.id)));
+      setSeleccionados(new Set());
+      setCobroSplit(COBRO_INICIAL);
+      setModoSplit(false);
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['productos-pos'] }),
+        queryClient.invalidateQueries({ queryKey: ['cuentas-prestamo'] }),
+        queryClient.invalidateQueries({ queryKey: ['resumen-dia'] }),
+      ]);
+    } catch (err) {
+      alert('❌ Error al guardar split: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setGuardandoSplit(false);
+    }
+  };
+
   if (isLoading) return <div className="fs-4 text-center py-5">Cargando productos...</div>;
   if (error) return <div className="text-danger fs-4 text-center py-5">Error: {error.message}</div>;
 
-  return (
-    <>
-      {/* MODAL CONFIRMACIÓN */}
-      {mostrarConfirmacion && (
-        <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} tabIndex="-1">
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content shadow-lg border-0">
-              <div className={`modal-header text-white ${modoPrestamo ? 'bg-warning' : 'bg-success'}`}>
-                <h4 className="modal-title fw-bold">
-                  {modoPrestamo ? '📋 Confirmar Fiado' : '✅ Confirmar Cobro'}
-                </h4>
+  // ── Modal reutilizable ───────────────────────────────────────────────────────
+  const ModalConfirmacion = ({ items, c, tot, pago, cam, onConfirm, onCancel, guardandoFlag, titulo, colorClass }) => {
+    const insuf = items.filter(item => item.cantidad > (item.stock ?? 0));
+    return (
+      <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }} tabIndex="-1">
+        <div className="modal-dialog modal-dialog-centered">
+          <div className="modal-content shadow-lg border-0">
+            <div className={`modal-header text-white ${colorClass}`}>
+              <h4 className="modal-title fw-bold">{titulo}</h4>
+            </div>
+            <div className="modal-body p-4">
+              <div className="text-center mb-4">
+                <div className="text-muted mb-1 fs-5">Total a cobrar</div>
+                <div className="display-4 fw-bold text-success">{formatMoney(tot)}</div>
               </div>
-              <div className="modal-body p-4">
-                <div className="text-center mb-4">
-                  <div className="text-muted mb-1 fs-5">Total a cobrar</div>
-                  <div className="display-4 fw-bold text-success">{formatMoney(total)}</div>
+              <div className="list-group list-group-flush mb-3">
+                <div className="list-group-item d-flex justify-content-between px-0 py-3">
+                  <span className="text-muted fs-5">Productos</span>
+                  <span className="fw-semibold fs-5">{items.length} artículo{items.length !== 1 ? 's' : ''}</span>
                 </div>
-                <div className="list-group list-group-flush mb-3">
+                {c.modoPrestamo ? (
                   <div className="list-group-item d-flex justify-content-between px-0 py-3">
-                    <span className="text-muted fs-5">Productos</span>
-                    <span className="fw-semibold fs-5">{venta.length} artículo{venta.length !== 1 ? 's' : ''}</span>
+                    <span className="text-muted fs-5">Cliente (fiado)</span>
+                    <span className="fw-semibold fs-5 text-warning">{c.cuentaSeleccionada?.nombre}</span>
                   </div>
-                  {modoPrestamo ? (
+                ) : (
+                  <>
                     <div className="list-group-item d-flex justify-content-between px-0 py-3">
-                      <span className="text-muted fs-5">Cliente (fiado)</span>
-                      <span className="fw-semibold fs-5 text-warning">{cuentaSeleccionada?.nombre}</span>
+                      <span className="text-muted fs-5">Forma de pago</span>
+                      <span className="fw-semibold fs-5">{ETIQUETA_MODO_PAGO[c.modoPago] || c.modoPago}</span>
                     </div>
-                  ) : (
-                    <>
+                    {c.modoPago !== 'TARJETA' && (
                       <div className="list-group-item d-flex justify-content-between px-0 py-3">
-                        <span className="text-muted fs-5">Forma de pago</span>
-                        <span className="fw-semibold fs-5">{ETIQUETA_MODO_PAGO[modoPago] || modoPago}</span>
+                        <span className="text-muted fs-5">Pago recibido</span>
+                        <span className="fw-semibold fs-5">{formatMoney(pago)}</span>
                       </div>
-                      {modoPago !== 'TARJETA' && (
-                        <div className="list-group-item d-flex justify-content-between px-0 py-3">
-                          <span className="text-muted fs-5">Pago recibido</span>
-                          <span className="fw-semibold fs-5">{formatMoney(pagoTotalMXN)}</span>
-                        </div>
-                      )}
-                      {modoPago !== 'TARJETA' && cambio >= 0 && pagoTotalMXN > 0 && (
-                        <div className="list-group-item d-flex justify-content-between px-0 py-2 bg-success-subtle rounded">
-                          <span className="fw-bold text-success fs-5">💵 Cambio</span>
-                          <span className="fw-bold fs-3 text-success">{formatMoney(cambio)}</span>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                {/* ALERTA INVENTARIO INSUFICIENTE — no bloqueante, solo informativa */}
-                {productosConInventarioInsuficiente.length > 0 && (
-                  <div className="alert alert-warning mb-0 mt-2" role="alert">
-                    <div className="fw-bold mb-1">⚠️ Inventario insuficiente detectado</div>
-                    <p className="mb-2" style={{ fontSize: '0.9rem' }}>
-                      Los siguientes productos no tienen suficiente inventario registrado.
-                      Al confirmar, el sistema <strong>agregará automáticamente</strong> lo
-                      faltante al inventario para cubrir esta venta:
-                    </p>
-                    <ul className="mb-0 ps-3" style={{ fontSize: '0.88rem' }}>
-                      {productosConInventarioInsuficiente.map(item => {
-                        const faltante = item.cantidad - (item.stock ?? 0);
-                        return (
-                          <li key={item.id}>
-                            <strong>{item.descripcion}</strong> — inventario actual:{' '}
-                            <span className="text-danger fw-bold">{item.stock ?? 0}</span>,
-                            cantidad a vender:{' '}
-                            <span className="fw-bold">{item.cantidad}</span>,
-                            se agregarán:{' '}
-                            <span className="text-success fw-bold">+{faltante}</span>
-                          </li>
-                        );
-                      })}
-                    </ul>
-                  </div>
+                    )}
+                    {c.modoPago !== 'TARJETA' && cam >= 0 && pago > 0 && (
+                      <div className="list-group-item d-flex justify-content-between px-0 py-2 bg-success-subtle rounded">
+                        <span className="fw-bold text-success fs-5">💵 Cambio</span>
+                        <span className="fw-bold fs-3 text-success">{formatMoney(cam)}</span>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
-              <div className="modal-footer border-0 pt-0 gap-2">
-                <button className="btn btn-outline-secondary btn-lg flex-fill" onClick={() => setMostrarConfirmacion(false)} disabled={guardando}>
-                  ✏️ Corregir
-                </button>
-                <button
-                  className={`btn btn-lg flex-fill fw-bold text-white ${modoPrestamo ? 'btn-warning' : 'btn-success'}`}
-                  onClick={confirmarVenta} disabled={guardando}
-                >
-                  {guardando
-                    ? <><span className="spinner-border spinner-border-sm me-2" />Guardando...</>
-                    : modoPrestamo ? '📋 Registrar Fiado' : '✅ Cobrar'}
-                </button>
-              </div>
+              {insuf.length > 0 && (
+                <div className="alert alert-warning mb-0 mt-2">
+                  <div className="fw-bold mb-1">⚠️ Inventario insuficiente</div>
+                  <ul className="mb-0 ps-3" style={{ fontSize: '0.88rem' }}>
+                    {insuf.map(item => {
+                      const faltante = item.cantidad - (item.stock ?? 0);
+                      return (
+                        <li key={item.id}>
+                          <strong>{item.descripcion}</strong> — stock: <span className="text-danger fw-bold">{item.stock ?? 0}</span>,
+                          vender: <span className="fw-bold">{item.cantidad}</span>,
+                          +<span className="text-success fw-bold">{faltante}</span> auto
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+            <div className="modal-footer border-0 pt-0 gap-2">
+              <button className="btn btn-outline-secondary btn-lg flex-fill" onClick={onCancel} disabled={guardandoFlag}>✏️ Corregir</button>
+              <button className={`btn btn-lg flex-fill fw-bold text-white ${colorClass}`} onClick={onConfirm} disabled={guardandoFlag}>
+                {guardandoFlag
+                  ? <><span className="spinner-border spinner-border-sm me-2" />Guardando...</>
+                  : c.modoPrestamo ? '📋 Registrar Fiado' : '✅ Cobrar'}
+              </button>
             </div>
           </div>
         </div>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      {/* MODAL CONFIRMACIÓN PRINCIPAL */}
+      {mostrarConfirmacion && (
+        <ModalConfirmacion
+          items={venta} c={cobro} tot={total} pago={pagoTotalMXN} cam={cambio}
+          onConfirm={confirmarVenta} onCancel={() => setMostrarConfirmacion(false)}
+          guardandoFlag={guardando}
+          titulo={cobro.modoPrestamo ? '📋 Confirmar Fiado' : '✅ Confirmar Cobro'}
+          colorClass={cobro.modoPrestamo ? 'bg-warning' : 'bg-success'}
+        />
+      )}
+
+      {/* MODAL CONFIRMACIÓN SPLIT */}
+      {mostrarConfirmacionSplit && (
+        <ModalConfirmacion
+          items={itemsSplit} c={cobroSplit} tot={totalSplit} pago={pagoSplitMXN} cam={cambioSplit}
+          onConfirm={confirmarSplit} onCancel={() => setMostrarConfirmacionSplit(false)}
+          guardandoFlag={guardandoSplit}
+          titulo={`✂️ Cobrar selección (${seleccionados.size} ítem${seleccionados.size !== 1 ? 's' : ''})`}
+          colorClass={cobroSplit.modoPrestamo ? 'bg-warning' : 'bg-info'}
+        />
       )}
 
       {/* LAYOUT PRINCIPAL */}
       <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        height: 'calc(100vh - 60px)',
-        overflow: 'hidden',
-        padding: '8px 16px',
-        gap: '8px',
+        display: 'flex', flexDirection: 'column',
+        height: 'calc(100vh - 60px)', overflow: 'hidden',
+        padding: '8px 16px', gap: '8px',
       }}>
 
         {/* HEADER */}
@@ -347,12 +459,13 @@ export default function Venta() {
               <div className="opacity-75" style={{ fontSize: '0.8rem' }}>
                 {venta.length} producto{venta.length !== 1 ? 's' : ''} en carrito
                 {codigoEscaneado && <span className="ms-2 badge bg-warning text-dark">🔢 Escaneando...</span>}
+                {modoSplit && <span className="ms-2 badge bg-info text-white">✂️ Modo split activo</span>}
               </div>
             </div>
           </div>
           <div className="text-end">
             <div className="fw-bold text-warning" style={{ fontSize: '2rem', lineHeight: 1 }}>{formatMoney(total)}</div>
-            <div className="opacity-75" style={{ fontSize: '0.75rem' }}>{modoPrestamo ? 'Por cobrar (fiado)' : 'Total'}</div>
+            <div className="opacity-75" style={{ fontSize: '0.75rem' }}>{cobro.modoPrestamo ? 'Por cobrar (fiado)' : 'Total'}</div>
           </div>
         </div>
 
@@ -362,16 +475,45 @@ export default function Venta() {
           {/* COLUMNA IZQUIERDA */}
           <div style={{ flex: '1 1 55%', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
             <ProductoSearch
-              busquedaCodigo={busquedaCodigo}
-              setBusquedaCodigo={setBusquedaCodigo}
-              busquedaNombre={busquedaNombre}
-              setBusquedaNombre={setBusquedaNombre}
+              busquedaCodigo={busquedaCodigo} setBusquedaCodigo={setBusquedaCodigo}
+              busquedaNombre={busquedaNombre} setBusquedaNombre={setBusquedaNombre}
               productosFiltrados={productosFiltrados}
               manejarSeleccionProducto={agregarAlCarrito}
               formatMoney={formatMoney}
               codigoEscaneado={codigoEscaneado}
               productos={productos}
             />
+
+            {/* BARRA SPLIT */}
+            {venta.length > 0 && (
+              <div className="d-flex align-items-center gap-2 flex-shrink-0">
+                {!modoSplit ? (
+                  <button
+                    className="btn btn-outline-info btn-sm fw-semibold"
+                    onClick={() => setModoSplit(true)}
+                    title="Separar cobro: selecciona ítems para cobrarlos con distinto método de pago o cliente"
+                  >
+                    ✂️ Separar cobro
+                  </button>
+                ) : (
+                  <>
+                    <button className="btn btn-outline-secondary btn-sm" onClick={cancelarSplit}>✕ Cancelar split</button>
+                    <button
+                      className="btn btn-outline-primary btn-sm"
+                      onClick={toggleTodosSeleccionados}
+                    >
+                      {seleccionados.size === venta.length ? '☐ Deseleccionar todo' : '☑ Seleccionar todo'}
+                    </button>
+                    {seleccionados.size > 0 && (
+                      <span className="ms-auto badge bg-warning text-dark fs-6 px-3 py-2">
+                        ✂️ Selección: {formatMoney(totalSplit)}
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+
             <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
               <VentaTabla
                 carrito={venta}
@@ -379,96 +521,151 @@ export default function Venta() {
                 cambiarCantidad={cambiarCantidad}
                 quitarDelCarrito={quitarDelCarrito}
                 pageSize={pageSize}
+                modoSplit={modoSplit}
+                seleccionados={seleccionados}
+                toggleSeleccion={toggleSeleccion}
               />
             </div>
           </div>
 
           {/* COLUMNA DERECHA */}
-          <div style={{
-            flex: '0 0 380px',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '8px',
-            minHeight: 0,
-          }}>
-            {/* TOTAL + BOTONES — fijos arriba, fuera del scroll */}
+          <div style={{ flex: '0 0 380px', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
+
+            {/* ── Panel SPLIT ─────────────────────────────────────────────────── */}
+            {modoSplit && seleccionados.size > 0 && (
+              <div className="card border-info shadow-sm flex-shrink-0" style={{ background: '#f0fbff' }}>
+                <div className="card-header bg-info text-white fw-bold py-2 d-flex justify-content-between">
+                  <span>✂️ Cobrar selección — {formatMoney(totalSplit)}</span>
+                  <span className="opacity-75" style={{ fontSize: '0.85rem' }}>{seleccionados.size} ítem{seleccionados.size !== 1 ? 's' : ''}</span>
+                </div>
+                <div className="card-body p-2" style={{ maxHeight: 340, overflowY: 'auto' }}>
+                  {/* Modo pago split */}
+                  <ModoPago
+                    modoPrestamo={cobroSplit.modoPrestamo}
+                    setModoPrestamo={(v) => setSplitVal('modoPrestamo', v)}
+                  />
+                  {cobroSplit.modoPrestamo ? (
+                    <CuentaPrestamo
+                      cuentas={cuentas}
+                      cuentaSeleccionada={cobroSplit.cuentaSeleccionada}
+                      setCuentaSeleccionada={(v) => setSplitVal('cuentaSeleccionada', v)}
+                      busquedaCuenta={cobroSplit.busquedaCuenta}
+                      setBusquedaCuenta={(v) => setSplitVal('busquedaCuenta', v)}
+                      formatMoney={formatMoney}
+                      cuentaData={cuentaSplitData}
+                    />
+                  ) : (
+                    <CobroContado
+                      pagoCliente={cobroSplit.pagoCliente}
+                      setPagoCliente={(v) => setSplitVal('pagoCliente', v)}
+                      cambio={cambioSplit}
+                      formatMoney={formatMoney}
+                      DENOMINACIONES={DENOMINACIONES}
+                      aplicarDenominacion={(m) => setSplitVal('pagoCliente', String(m.toFixed(2)))}
+                      total={totalSplit}
+                      modoPago={cobroSplit.modoPago}
+                      setModoPago={(v) => setSplitVal('modoPago', v)}
+                      pagoDolares={cobroSplit.pagoDolares}
+                      setPagoDolares={(v) => setSplitVal('pagoDolares', v)}
+                      pagoMixtoPesos={cobroSplit.pagoMixtoPesos}
+                      setPayoMixtoPesos={(v) => setSplitVal('pagoMixtoPesos', v)}
+                      pagoMixtoDolares={cobroSplit.pagoMixtoDolares}
+                      setPagoMixtoDolares={(v) => setSplitVal('pagoMixtoDolares', v)}
+                      pagoMixtoTarjeta={cobroSplit.pagoMixtoTarjeta}
+                      setPagoMixtoTarjeta={(v) => setSplitVal('pagoMixtoTarjeta', v)}
+                    />
+                  )}
+                  <button
+                    className="btn btn-info text-white fw-bold w-100 mt-2"
+                    style={{ fontSize: '1.1rem', height: 48 }}
+                    onClick={handleCobrarSplit}
+                  >
+                    ✂️ Cobrar {formatMoney(totalSplit)} por separado
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── Cobro principal ──────────────────────────────────────────────── */}
             <div style={{ flexShrink: 0 }}>
-              <div
-                className={`rounded p-3 mb-2 text-center ${modoPrestamo ? 'bg-warning-subtle border border-warning' : 'bg-success-subtle border border-success'}`}
-              >
-                <div className={`fw-bold mb-1 ${modoPrestamo ? 'text-warning' : 'text-success'}`} style={{ fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: 1 }}>
-                  {modoPrestamo ? '📋 Total Fiado' : '💵 Total a Cobrar'}
+              <div className={`rounded p-3 mb-2 text-center ${
+                cobro.modoPrestamo ? 'bg-warning-subtle border border-warning' : 'bg-success-subtle border border-success'
+              }`}>
+                <div className={`fw-bold mb-1 ${cobro.modoPrestamo ? 'text-warning' : 'text-success'}`}
+                  style={{ fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: 1 }}>
+                  {cobro.modoPrestamo ? '📋 Total Fiado' : '💵 Total a Cobrar'}
+                  {modoSplit && seleccionados.size > 0 && (
+                    <span className="ms-2 text-muted fw-normal" style={{ fontSize: '0.8rem' }}>(restante)</span>
+                  )}
                 </div>
-                <div className={`fw-bold ${modoPrestamo ? 'text-warning' : 'text-success'}`} style={{ fontSize: '2.6rem', lineHeight: 1 }}>
-                  {formatMoney(total)}
+                <div className={`fw-bold ${cobro.modoPrestamo ? 'text-warning' : 'text-success'}`}
+                  style={{ fontSize: '2.6rem', lineHeight: 1 }}>
+                  {formatMoney(modoSplit && seleccionados.size > 0 ? total - totalSplit : total)}
                 </div>
-                {!modoPrestamo && cambio >= 0 && pagoTotalMXN > 0 && (
-                  <div className="mt-2 text-success fw-semibold" style={{ fontSize: '1.1rem' }}>
-                    💵 Cambio: {formatMoney(cambio)}
-                  </div>
+                {!cobro.modoPrestamo && cambio >= 0 && pagoTotalMXN > 0 && (
+                  <div className="mt-2 text-success fw-semibold" style={{ fontSize: '1.1rem' }}>💵 Cambio: {formatMoney(cambio)}</div>
                 )}
                 <div className="text-muted mt-1" style={{ fontSize: '0.8rem' }}>
-                  {venta.length} artículo{venta.length !== 1 ? 's' : ''}
+                  {modoSplit && seleccionados.size > 0
+                    ? `${venta.length - seleccionados.size} artículo${(venta.length - seleccionados.size) !== 1 ? 's' : ''} restantes`
+                    : `${venta.length} artículo${venta.length !== 1 ? 's' : ''}`}
                 </div>
               </div>
 
               <div className="d-flex gap-2">
-                <button
-                  className="btn btn-outline-secondary fw-bold"
-                  style={{ height: '60px', minWidth: '110px', fontSize: '1rem' }}
-                  onClick={limpiarVenta}
-                >
+                <button className="btn btn-outline-secondary fw-bold" style={{ height: '60px', minWidth: '110px', fontSize: '1rem' }} onClick={limpiarVenta}>
                   <i className="bi bi-arrow-repeat me-1" />Limpiar
                 </button>
                 <button
                   className={`btn fw-bold flex-fill text-white ${
-                    venta.length === 0 || (modoPrestamo && !cuentaSeleccionada)
+                    venta.length === 0 || (cobro.modoPrestamo && !cobro.cuentaSeleccionada)
                       ? 'btn-secondary'
-                      : modoPrestamo ? 'btn-warning' : 'btn-success'
+                      : cobro.modoPrestamo ? 'btn-warning' : 'btn-success'
                   }`}
                   style={{ height: '60px', fontSize: '1.35rem' }}
                   onClick={handleCobrar}
-                  disabled={venta.length === 0 || (modoPrestamo && !cuentaSeleccionada)}
+                  disabled={venta.length === 0 || (cobro.modoPrestamo && !cobro.cuentaSeleccionada)}
                 >
-                  <i className={`bi me-2 ${modoPrestamo ? 'bi-person-check-fill' : 'bi-check-circle-fill'}`} />
-                  {modoPrestamo ? 'Fiado' : 'Cobrar'}
+                  <i className={`bi me-2 ${cobro.modoPrestamo ? 'bi-person-check-fill' : 'bi-check-circle-fill'}`} />
+                  {modoSplit && seleccionados.size > 0
+                    ? (cobro.modoPrestamo ? 'Fiado restante' : 'Cobrar restante')
+                    : (cobro.modoPrestamo ? 'Fiado' : 'Cobrar')}
                 </button>
               </div>
             </div>
 
-            {/* SECCIÓN SCROLLEABLE: modo pago + cobro/préstamo */}
+            {/* Cobro principal — scroll */}
             <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-              <ModoPago modoPrestamo={modoPrestamo} setModoPrestamo={setModoPrestamo} />
-
-              {modoPrestamo ? (
+              <ModoPago modoPrestamo={cobro.modoPrestamo} setModoPrestamo={(v) => setCobVal('modoPrestamo', v)} />
+              {cobro.modoPrestamo ? (
                 <CuentaPrestamo
                   cuentas={cuentas}
-                  cuentaSeleccionada={cuentaSeleccionada}
-                  setCuentaSeleccionada={setCuentaSeleccionada}
-                  busquedaCuenta={busquedaCuenta}
-                  setBusquedaCuenta={setBusquedaCuenta}
+                  cuentaSeleccionada={cobro.cuentaSeleccionada}
+                  setCuentaSeleccionada={(v) => setCobVal('cuentaSeleccionada', v)}
+                  busquedaCuenta={cobro.busquedaCuenta}
+                  setBusquedaCuenta={(v) => setCobVal('busquedaCuenta', v)}
                   formatMoney={formatMoney}
                   cuentaData={cuentaSeleccionadaData}
                 />
               ) : (
                 <CobroContado
-                  pagoCliente={pagoCliente}
-                  setPagoCliente={setPagoCliente}
+                  pagoCliente={cobro.pagoCliente}
+                  setPagoCliente={(v) => setCobVal('pagoCliente', v)}
                   cambio={cambio}
                   formatMoney={formatMoney}
                   DENOMINACIONES={DENOMINACIONES}
-                  aplicarDenominacion={aplicarDenominacion}
+                  aplicarDenominacion={(m) => setCobVal('pagoCliente', String(m.toFixed(2)))}
                   total={total}
-                  modoPago={modoPago}
-                  setModoPago={setModoPago}
-                  pagoDolares={pagoDolares}
-                  setPagoDolares={setPagoDolares}
-                  pagoMixtoPesos={pagoMixtoPesos}
-                  setPayoMixtoPesos={setPayoMixtoPesos}
-                  pagoMixtoDolares={pagoMixtoDolares}
-                  setPagoMixtoDolares={setPagoMixtoDolares}
-                  pagoMixtoTarjeta={pagoMixtoTarjeta}
-                  setPagoMixtoTarjeta={setPagoMixtoTarjeta}
+                  modoPago={cobro.modoPago}
+                  setModoPago={(v) => setCobVal('modoPago', v)}
+                  pagoDolares={cobro.pagoDolares}
+                  setPagoDolares={(v) => setCobVal('pagoDolares', v)}
+                  pagoMixtoPesos={cobro.pagoMixtoPesos}
+                  setPayoMixtoPesos={(v) => setCobVal('pagoMixtoPesos', v)}
+                  pagoMixtoDolares={cobro.pagoMixtoDolares}
+                  setPagoMixtoDolares={(v) => setCobVal('pagoMixtoDolares', v)}
+                  pagoMixtoTarjeta={cobro.pagoMixtoTarjeta}
+                  setPagoMixtoTarjeta={(v) => setCobVal('pagoMixtoTarjeta', v)}
                 />
               )}
             </div>

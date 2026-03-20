@@ -4,6 +4,10 @@ export default function VentaTabla({
   cambiarCantidad,
   quitarDelCarrito,
   pageSize,
+  // Split props (opcionales)
+  modoSplit = false,
+  seleccionados = new Set(),
+  toggleSeleccion,
 }) {
   return (
     <div className="card shadow-sm" style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -11,6 +15,11 @@ export default function VentaTabla({
         <span className="fw-bold" style={{ fontSize: '1rem' }}>
           🛒 Carrito
           <span className="badge bg-primary ms-2">{carrito.length}</span>
+          {modoSplit && seleccionados.size > 0 && (
+            <span className="badge bg-warning text-dark ms-2">
+              ✂️ {seleccionados.size} seleccionado{seleccionados.size !== 1 ? 's' : ''}
+            </span>
+          )}
         </span>
         {carrito.length > 0 && (
           <span className="text-muted" style={{ fontSize: '0.8rem' }}>
@@ -22,7 +31,8 @@ export default function VentaTabla({
         <table className="table table-hover mb-0" style={{ fontSize: '1rem' }}>
           <thead className="table-light sticky-top">
             <tr>
-              <th style={{ width: '38%' }} className="py-2">Producto</th>
+              {modoSplit && <th style={{ width: '38px' }} className="py-2 text-center" />}
+              <th style={{ width: modoSplit ? '33%' : '38%' }} className="py-2">Producto</th>
               <th className="text-end py-2" style={{ width: '14%' }}>Precio</th>
               <th className="text-center py-2" style={{ width: '14%' }}>Cant.</th>
               <th className="text-center py-2" style={{ width: '10%' }}>Inventario</th>
@@ -36,14 +46,31 @@ export default function VentaTabla({
               const stock = item.stock ?? 0;
               const sinStock = stock <= 0;
               const excedeStock = item.cantidad > stock;
+              const estaSeleccionado = modoSplit && seleccionados.has(item.id);
               return (
-                <tr key={item.id} className="align-middle" style={{ height: '52px' }}>
+                <tr
+                  key={item.id}
+                  className={`align-middle${estaSeleccionado ? ' table-warning' : ''}`}
+                  style={{ height: '52px', cursor: modoSplit ? 'pointer' : 'default' }}
+                  onClick={modoSplit ? () => toggleSeleccion(item.id) : undefined}
+                >
+                  {modoSplit && (
+                    <td className="text-center" onClick={e => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        className="form-check-input"
+                        style={{ width: '1.3em', height: '1.3em', cursor: 'pointer' }}
+                        checked={estaSeleccionado}
+                        onChange={() => toggleSeleccion(item.id)}
+                      />
+                    </td>
+                  )}
                   <td>
                     <div className="fw-semibold" style={{ fontSize: '0.95rem' }}>{item.descripcion}</div>
                     <small className="text-muted">#{item.codigo}</small>
                   </td>
                   <td className="text-end fw-medium">{formatMoney(item.precio)}</td>
-                  <td className="text-center">
+                  <td className="text-center" onClick={e => e.stopPropagation()}>
                     <input
                       type="number"
                       min="1"
@@ -56,11 +83,11 @@ export default function VentaTabla({
                   </td>
                   <td className="text-center">
                     {sinStock ? (
-                      <span className="badge bg-warning text-dark" title="Sin inventario registrado — puede haber producto físico">
+                      <span className="badge bg-warning text-dark" title="Sin inventario registrado">
                         ⚠️ {stock}
                       </span>
                     ) : excedeStock ? (
-                      <span className="badge bg-warning text-dark" title="Vendiendo más del inventario registrado">
+                      <span className="badge bg-warning text-dark" title="Vendiendo más del inventario">
                         ⚠️ {stock}
                       </span>
                     ) : (
@@ -68,7 +95,7 @@ export default function VentaTabla({
                     )}
                   </td>
                   <td className="text-end fw-semibold text-success">{formatMoney(item.precio * item.cantidad)}</td>
-                  <td className="text-center p-1">
+                  <td className="text-center p-1" onClick={e => e.stopPropagation()}>
                     <button
                       type="button"
                       className="btn btn-danger rounded-circle fw-bold"
@@ -84,7 +111,7 @@ export default function VentaTabla({
             })}
             {carrito.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-center text-muted py-5">
+                <td colSpan={modoSplit ? 7 : 6} className="text-center text-muted py-5">
                   <i className="bi bi-cart-x fs-1 d-block mb-2 opacity-50" />
                   <div className="fs-5 fw-semibold">Carrito vacío</div>
                   <small>Busca o escanea un producto</small>

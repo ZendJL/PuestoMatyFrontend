@@ -37,6 +37,7 @@ export default function Venta() {
   const [pagoDolares, setPagoDolares] = useState('');
   const [pagoMixtoPesos, setPayoMixtoPesos] = useState('');
   const [pagoMixtoDolares, setPagoMixtoDolares] = useState('');
+  const [pagoMixtoTarjeta, setPagoMixtoTarjeta] = useState('');
 
   const queryClient = useQueryClient();
 
@@ -111,9 +112,13 @@ export default function Venta() {
     if (modoPago === 'PESOS')   return Number(pagoCliente) || 0;
     if (modoPago === 'DOLARES') return (Number(pagoDolares) || 0) * tasaCambio;
     if (modoPago === 'TARJETA') return total;
-    if (modoPago === 'MIXTO')   return (Number(pagoMixtoPesos) || 0) + (Number(pagoMixtoDolares) || 0) * tasaCambio;
+    if (modoPago === 'MIXTO')   return (
+      (Number(pagoMixtoPesos) || 0) +
+      (Number(pagoMixtoDolares) || 0) * tasaCambio +
+      (Number(pagoMixtoTarjeta) || 0)
+    );
     return 0;
-  }, [modoPago, pagoCliente, pagoDolares, pagoMixtoPesos, pagoMixtoDolares, tasaCambio, total]);
+  }, [modoPago, pagoCliente, pagoDolares, pagoMixtoPesos, pagoMixtoDolares, pagoMixtoTarjeta, tasaCambio, total]);
 
   const cambio = useMemo(() => Math.max(pagoTotalMXN - total, 0), [pagoTotalMXN, total]);
 
@@ -162,7 +167,7 @@ export default function Venta() {
     setVenta([]); setModoPrestamo(false); setCuentaSeleccionada(null);
     setBusquedaCuenta(''); setBusquedaCodigo(''); setBusquedaNombre('');
     setCodigoEscaneado(''); setPagoCliente(''); setPagoDolares('');
-    setPayoMixtoPesos(''); setPagoMixtoDolares(''); setModoPago('PESOS');
+    setPayoMixtoPesos(''); setPagoMixtoDolares(''); setPagoMixtoTarjeta(''); setModoPago('PESOS');
     setMostrarConfirmacion(false);
   }, []);
 
@@ -207,7 +212,7 @@ export default function Venta() {
       setMostrarConfirmacion(false);
       if (window.confirm('¿Imprimir ticket?')) {
         imprimirTicketVenta(ventaGuardada.id, {
-          infoPago: { modoPago, tasaCambio, pagoDolares, pagoMixtoPesos, pagoMixtoDolares }
+          infoPago: { modoPago, tasaCambio, pagoDolares, pagoMixtoPesos, pagoMixtoDolares, pagoMixtoTarjeta }
         });
       }
       limpiarVenta();
@@ -265,7 +270,7 @@ export default function Venta() {
                           <span className="fw-semibold fs-5">{formatMoney(pagoTotalMXN)}</span>
                         </div>
                       )}
-                      {modoPago !== 'TARJETA' && cambio > 0 && (
+                      {modoPago !== 'TARJETA' && cambio >= 0 && pagoTotalMXN > 0 && (
                         <div className="list-group-item d-flex justify-content-between px-0 py-2 bg-success-subtle rounded">
                           <span className="fw-bold text-success fs-5">💵 Cambio</span>
                           <span className="fw-bold fs-3 text-success">{formatMoney(cambio)}</span>
@@ -397,7 +402,7 @@ export default function Venta() {
                 <div className={`fw-bold ${modoPrestamo ? 'text-warning' : 'text-success'}`} style={{ fontSize: '2.6rem', lineHeight: 1 }}>
                   {formatMoney(total)}
                 </div>
-                {!modoPrestamo && cambio > 0 && (
+                {!modoPrestamo && cambio >= 0 && pagoTotalMXN > 0 && (
                   <div className="mt-2 text-success fw-semibold" style={{ fontSize: '1.1rem' }}>
                     💵 Cambio: {formatMoney(cambio)}
                   </div>
@@ -462,6 +467,8 @@ export default function Venta() {
                   setPayoMixtoPesos={setPayoMixtoPesos}
                   pagoMixtoDolares={pagoMixtoDolares}
                   setPagoMixtoDolares={setPagoMixtoDolares}
+                  pagoMixtoTarjeta={pagoMixtoTarjeta}
+                  setPagoMixtoTarjeta={setPagoMixtoTarjeta}
                 />
               )}
             </div>

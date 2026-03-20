@@ -46,6 +46,7 @@ export const imprimirTicketVenta = async (ventaId, opciones = {}) => {
 const generarHtmlTicket = ({ venta, total, pagoCliente, cambio, esPrestamo, cuentaSeleccionada, productosVenta, fechaTicket, infoPago }) => {
   const pago = Number(pagoCliente) || 0;
   const esTarjeta = infoPago?.modoPago === 'TARJETA';
+  const esMixto = infoPago?.modoPago === 'MIXTO';
 
   const seccionPagoDolares = () => {
     if (!infoPago) return '';
@@ -62,15 +63,33 @@ const generarHtmlTicket = ({ venta, total, pagoCliente, cambio, esPrestamo, cuen
       `;
     }
     if (infoPago.modoPago === 'MIXTO') {
+      const tarjetaMixto = Number(infoPago.pagoMixtoTarjeta) || 0;
+      const cambioMixto = Math.max(
+        (Number(infoPago.pagoMixtoPesos) || 0) +
+        (Number(infoPago.pagoMixtoDolares) || 0) * Number(infoPago.tasaCambio) +
+        tarjetaMixto - total,
+        0
+      );
       return `
         <div class="linea small"><span>  Forma de pago:</span><span>🔀 Mixto</span></div>
+        ${Number(infoPago.pagoMixtoPesos) > 0 ? `
         <div class="linea small">
           <span>  Pesos:</span>
           <span>${formatMoney(Number(infoPago.pagoMixtoPesos))}</span>
-        </div>
+        </div>` : ''}
+        ${Number(infoPago.pagoMixtoDolares) > 0 ? `
         <div class="linea small">
           <span>  USD $${Number(infoPago.pagoMixtoDolares).toFixed(2)}</span>
           <span>T/C: ${infoPago.tasaCambio}</span>
+        </div>` : ''}
+        ${tarjetaMixto > 0 ? `
+        <div class="linea small">
+          <span>  Tarjeta:</span>
+          <span>${formatMoney(tarjetaMixto)}</span>
+        </div>` : ''}
+        <div class="linea">
+          <span>Cambio</span>
+          <span>${formatMoney(cambioMixto)}</span>
         </div>
       `;
     }
@@ -126,10 +145,10 @@ const generarHtmlTicket = ({ venta, total, pagoCliente, cambio, esPrestamo, cuen
           ${!esPrestamo ? `
             <div class="linea">
               <span>Pago</span>
-              <span>${esTarjeta ? '💳 Tarjeta' : formatMoney(pago)}</span>
+              <span>${esTarjeta ? '💳 Tarjeta' : esMixto ? '🔀 Mixto' : formatMoney(pago)}</span>
             </div>
             ${seccionPagoDolares()}
-            ${!esTarjeta ? `
+            ${!esTarjeta && !esMixto ? `
               <div class="linea">
                 <span>Cambio</span>
                 <span>${formatMoney(cambio)}</span>

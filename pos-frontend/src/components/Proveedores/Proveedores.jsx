@@ -8,6 +8,7 @@ const INVENTARIO_BAJO_UMBRAL = 5;
 export default function Proveedores() {
   const [proveedorSeleccionado, setProveedorSeleccionado] = useState(null);
   const [busqueda, setBusqueda] = useState('');
+  const [busquedaProducto, setBusquedaProducto] = useState('');
   const [mostrarCompra, setMostrarCompra] = useState(false);
   const [productoCompra, setProductoCompra] = useState(null);
   const [cantidadCompra, setCantidadCompra] = useState('');
@@ -45,20 +46,24 @@ export default function Proveedores() {
       .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
   }, [productos]);
 
+  // Filtro de la lista lateral (por nombre de proveedor únicamente)
   const proveedoresFiltrados = useMemo(() => {
     const q = busqueda.toLowerCase().trim();
     if (!q) return proveedores;
-    return proveedores.filter(pv =>
-      pv.nombre.toLowerCase().includes(q) ||
-      pv.productos.some(p => p.descripcion?.toLowerCase().includes(q))
-    );
+    return proveedores.filter(pv => pv.nombre.toLowerCase().includes(q));
   }, [proveedores, busqueda]);
+
+  // Al cambiar de proveedor, limpiar buscador interno
+  const seleccionarProveedor = (nombre) => {
+    setProveedorSeleccionado(nombre === proveedorSeleccionado ? null : nombre);
+    setBusquedaProducto('');
+  };
 
   const comprarMutation = useMutation({
     mutationFn: ({ id, cantidad, costo }) =>
       axios.post(`/api/productos/${id}/agregar-stock?cantidad=${cantidad}&precioCompra=${costo}`),
     onSuccess: () => {
-      alert('\u2705 Compra registrada e inventario actualizado');
+      alert('✅ Compra registrada e inventario actualizado');
       setMostrarCompra(false);
       setProductoCompra(null);
       setCantidadCompra('');
@@ -66,26 +71,39 @@ export default function Proveedores() {
       queryClient.invalidateQueries({ queryKey: ['productos-altas'] });
       queryClient.invalidateQueries({ queryKey: ['productos-pos'] });
     },
-    onError: (err) => alert('\u274c Error: ' + (err.response?.data?.message || err.message)),
+    onError: (err) => alert('❌ Error: ' + (err.response?.data?.message || err.message)),
   });
 
   const handleRegistrarCompra = () => {
     const cant = parseInt(cantidadCompra, 10);
     const costo = parseFloat(costoCompra);
     if (!productoCompra) return;
-    if (!cant || cant <= 0) { alert('Cantidad inv\u00e1lida'); return; }
-    if (isNaN(costo) || costo < 0) { alert('Costo inv\u00e1lido'); return; }
+    if (!cant || cant <= 0) { alert('Cantidad inválida'); return; }
+    if (isNaN(costo) || costo < 0) { alert('Costo inválido'); return; }
     comprarMutation.mutate({ id: productoCompra.id, cantidad: cant, costo });
   };
 
-  const provSelec = proveedoresFiltrados.find(p => p.nombre === proveedorSeleccionado);
+  const provSelec = proveedoresFiltrados.find(p => p.nombre === proveedorSeleccionado)
+    // fallback: si el proveedor seleccionado no aparece en la lista filtrada (ej. se escribió en el buscador lateral)
+    || proveedores.find(p => p.nombre === proveedorSeleccionado);
+
+  // Productos del proveedor filtrados por el buscador interno
+  const productosFiltradosPanel = useMemo(() => {
+    if (!provSelec) return [];
+    const q = busquedaProducto.toLowerCase().trim();
+    if (!q) return provSelec.productos;
+    return provSelec.productos.filter(p =>
+      p.descripcion?.toLowerCase().includes(q) ||
+      p.codigo?.toString().toLowerCase().includes(q)
+    );
+  }, [provSelec, busquedaProducto]);
 
   if (isLoading) return <div className="text-center py-5 fs-5">Cargando proveedores...</div>;
 
   return (
     <div style={{ height: 'calc(100vh - 70px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
 
-      {/* ── HEADER ─────────────────────────────────────────────── */}
+      {/* HEADER */}
       <div className="bg-primary text-white px-3 py-2 d-flex justify-content-between align-items-center flex-shrink-0" style={{ minHeight: 54 }}>
         <div>
           <h5 className="mb-0 fw-bold">🏤 Proveedores</h5>
@@ -103,14 +121,14 @@ export default function Proveedores() {
         </div>
       </div>
 
-      {/* ── BARRA FILTRO ────────────────────────────────────────── */}
+      {/* BARRA FILTRO (solo proveedores) */}
       <div className="bg-body-tertiary border-bottom px-3 py-2 flex-shrink-0">
         <div className="input-group" style={{ maxWidth: 400 }}>
           <span className="input-group-text"><i className="bi bi-search" /></span>
           <input
             type="text"
             className="form-control"
-            placeholder="Buscar proveedor o producto..."
+            placeholder="Buscar proveedor..."
             value={busqueda}
             onChange={e => setBusqueda(e.target.value)}
           />
@@ -122,7 +140,7 @@ export default function Proveedores() {
         </div>
       </div>
 
-      {/* ── CUERPO 2 COLUMNAS ────────────────────────────────── */}
+      {/* CUERPO 2 COLUMNAS */}
       <div className="flex-fill d-flex overflow-hidden">
 
         {/* COLUMNA IZQUIERDA: lista de proveedores */}
@@ -144,7 +162,7 @@ export default function Proveedores() {
                     className={`list-group-item list-group-item-action d-flex justify-content-between align-items-start py-3 px-3 ${
                       proveedorSeleccionado === pv.nombre ? 'active' : ''
                     }`}
-                    onClick={() => setProveedorSeleccionado(pv.nombre === proveedorSeleccionado ? null : pv.nombre)}
+                    onClick={() => seleccionarProveedor(pv.nombre)}
                   >
                     <div>
                       <div className="fw-semibold">{pv.nombre}</div>
@@ -180,65 +198,97 @@ export default function Proveedores() {
                   <span className="badge bg-success">{formatMoney(provSelec.valorInventario)}</span>
                 </div>
               </div>
-              <button className="btn btn-outline-secondary" onClick={() => setProveedorSeleccionado(null)}>
+              <button className="btn btn-outline-secondary" onClick={() => seleccionarProveedor(null)}>
                 <i className="bi bi-x-lg" /> Cerrar
               </button>
             </div>
 
+            {/* BUSCADOR DE PRODUCTOS DENTRO DEL PROVEEDOR */}
+            <div className="px-3 py-2 border-bottom bg-body flex-shrink-0">
+              <div className="input-group input-group-sm" style={{ maxWidth: 360 }}>
+                <span className="input-group-text"><i className="bi bi-search" /></span>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Buscar producto por nombre o código..."
+                  value={busquedaProducto}
+                  onChange={e => setBusquedaProducto(e.target.value)}
+                  autoFocus
+                />
+                {busquedaProducto && (
+                  <button className="btn btn-outline-secondary" onClick={() => setBusquedaProducto('')}>
+                    <i className="bi bi-x" />
+                  </button>
+                )}
+              </div>
+              {busquedaProducto && (
+                <small className="text-muted mt-1 d-block">
+                  {productosFiltradosPanel.length} de {provSelec.totalProductos} productos
+                </small>
+              )}
+            </div>
+
             <div className="overflow-auto flex-fill">
-              <table className="table table-hover table-sm mb-0">
-                <thead className="table-light sticky-top">
-                  <tr>
-                    <th>Producto</th>
-                    <th className="text-end" style={{ width: 90 }}>Inventario</th>
-                    <th className="text-end" style={{ width: 110 }}>Costo</th>
-                    <th className="text-end" style={{ width: 110 }}>Precio</th>
-                    <th className="text-center" style={{ width: 120 }}>Acción</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {provSelec.productos.map(p => {
-                    const inventarioBajo = (p.cantidad ?? 0) <= INVENTARIO_BAJO_UMBRAL;
-                    return (
-                      <tr key={p.id} className={p.activo === false ? 'opacity-50' : ''}>
-                        <td>
-                          <div className="fw-semibold">{p.descripcion}</div>
-                          <small className="text-muted">#{p.codigo}</small>
-                          {p.activo === false && (
-                            <span className="badge bg-secondary ms-1" style={{ fontSize: '0.6rem' }}>Inactivo</span>
-                          )}
-                        </td>
-                        <td className="text-end">
-                          <span className={`fw-bold ${
-                            inventarioBajo
-                              ? (p.cantidad ?? 0) === 0 ? 'text-danger' : 'text-warning'
-                              : 'text-success'
-                          }`}>
-                            {p.cantidad ?? 0}
-                            {inventarioBajo && <i className="bi bi-exclamation-triangle-fill ms-1" style={{ fontSize: '0.7rem' }} />}
-                          </span>
-                        </td>
-                        <td className="text-end text-muted small">{p.precioCompra ? formatMoney(p.precioCompra) : '—'}</td>
-                        <td className="text-end text-success fw-semibold">{formatMoney(p.precio)}</td>
-                        <td className="text-center p-1">
-                          <button
-                            className="btn btn-sm btn-outline-primary"
-                            style={{ fontSize: '0.75rem' }}
-                            onClick={() => {
-                              setProductoCompra(p);
-                              setCostoCompra(p.precioCompra ? String(p.precioCompra) : '');
-                              setCantidadCompra('');
-                              setMostrarCompra(true);
-                            }}
-                          >
-                            <i className="bi bi-plus-circle me-1" />Comprar
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+              {productosFiltradosPanel.length === 0 ? (
+                <div className="text-center text-muted py-5">
+                  <i className="bi bi-search fs-1 d-block mb-2 opacity-50" />
+                  <div className="fs-6">Sin productos para "<strong>{busquedaProducto}</strong>"</div>
+                </div>
+              ) : (
+                <table className="table table-hover table-sm mb-0">
+                  <thead className="table-light sticky-top">
+                    <tr>
+                      <th>Producto</th>
+                      <th className="text-end" style={{ width: 90 }}>Inventario</th>
+                      <th className="text-end" style={{ width: 110 }}>Costo</th>
+                      <th className="text-end" style={{ width: 110 }}>Precio</th>
+                      <th className="text-center" style={{ width: 120 }}>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productosFiltradosPanel.map(p => {
+                      const inventarioBajo = (p.cantidad ?? 0) <= INVENTARIO_BAJO_UMBRAL;
+                      return (
+                        <tr key={p.id} className={p.activo === false ? 'opacity-50' : ''}>
+                          <td>
+                            <div className="fw-semibold">{p.descripcion}</div>
+                            <small className="text-muted">#{p.codigo}</small>
+                            {p.activo === false && (
+                              <span className="badge bg-secondary ms-1" style={{ fontSize: '0.6rem' }}>Inactivo</span>
+                            )}
+                          </td>
+                          <td className="text-end">
+                            <span className={`fw-bold ${
+                              inventarioBajo
+                                ? (p.cantidad ?? 0) === 0 ? 'text-danger' : 'text-warning'
+                                : 'text-success'
+                            }`}>
+                              {p.cantidad ?? 0}
+                              {inventarioBajo && <i className="bi bi-exclamation-triangle-fill ms-1" style={{ fontSize: '0.7rem' }} />}
+                            </span>
+                          </td>
+                          <td className="text-end text-muted small">{p.precioCompra ? formatMoney(p.precioCompra) : '—'}</td>
+                          <td className="text-end text-success fw-semibold">{formatMoney(p.precio)}</td>
+                          <td className="text-center p-1">
+                            <button
+                              className="btn btn-sm btn-outline-primary"
+                              style={{ fontSize: '0.75rem' }}
+                              onClick={() => {
+                                setProductoCompra(p);
+                                setCostoCompra(p.precioCompra ? String(p.precioCompra) : '');
+                                setCantidadCompra('');
+                                setMostrarCompra(true);
+                              }}
+                            >
+                              <i className="bi bi-plus-circle me-1" />Comprar
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         ) : (
@@ -252,7 +302,7 @@ export default function Proveedores() {
         )}
       </div>
 
-      {/* ── MODAL COMPRA ────────────────────────────────────────── */}
+      {/* MODAL COMPRA */}
       {mostrarCompra && productoCompra && (
         <div className="modal d-block" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
           <div className="modal-dialog modal-dialog-centered">

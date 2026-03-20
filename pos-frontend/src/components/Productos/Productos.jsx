@@ -240,7 +240,7 @@ export default function Productos() {
           if (producto) {
             seleccionarProducto(producto);
           } else {
-            if (confirm(`C\u00f3digo ${codigo} no encontrado.\n\u00bfAgregar como nuevo producto?`)) {
+            if (confirm(`Código ${codigo} no encontrado.\n¿Agregar como nuevo producto?`)) {
               setForm(prev => ({ ...prev, codigo }));
               setTabActiva('nuevo');
             }
@@ -305,7 +305,7 @@ export default function Productos() {
 
   const handleImprimirTodosGenerados = async () => {
     if (productosGenerados.length === 0) {
-      alert('No hay productos con c\u00f3digos generados (99) para imprimir');
+      alert('No hay productos con códigos generados (99) para imprimir');
       return;
     }
     try {
@@ -315,7 +315,7 @@ export default function Productos() {
       );
       await imprimirCodigosBarrasMasivo(ordenados);
     } catch {
-      alert('Error al preparar la impresi\u00f3n');
+      alert('Error al preparar la impresión');
     } finally {
       setImprimiendoTodos(false);
     }
@@ -367,7 +367,7 @@ export default function Productos() {
         cantidad: productoSeleccionado.cantidad,
       });
       queryClient.invalidateQueries({ queryKey: ['productos-altas'] });
-      alert('\u2705 Cambios guardados');
+      alert('✅ Cambios guardados');
     } catch (err) {
       alert('Error al guardar: ' + (err.response?.data?.message || err.message));
     }
@@ -390,10 +390,10 @@ export default function Productos() {
       >
         <div>
           <h5 className="mb-0 fw-bold">
-            <span className="me-2" style={{ fontSize: '1.3rem' }}>\ud83d\udce6</span>
-            Gesti\u00f3n de Productos
+            <span className="me-2" style={{ fontSize: '1.3rem' }}>📦</span>
+            Gestión de Productos
           </h5>
-          <small className="opacity-75">{totalProductos} total \u00b7 {productosActivos} activos</small>
+          <small className="opacity-75">{totalProductos} total · {productosActivos} activos</small>
         </div>
         <div className="d-flex align-items-center gap-3 flex-wrap">
           <div className="form-check form-switch mb-0 text-white">
@@ -406,7 +406,7 @@ export default function Productos() {
               style={{ width: '2.5em', height: '1.25em' }}
             />
             <label className="form-check-label fw-semibold ms-2" htmlFor="soloActivosCheck">
-              S\u00f3lo activos
+              Sólo activos
             </label>
           </div>
           <button
@@ -416,7 +416,7 @@ export default function Productos() {
           >
             {imprimiendoTodos
               ? <><span className="spinner-border spinner-border-sm me-1" />Imprimiendo...</>
-              : <><i className="bi bi-printer-fill me-1" />C\u00f3digos ({productosGenerados.length})</>}
+              : <><i className="bi bi-printer-fill me-1" />Códigos ({productosGenerados.length})</>}
           </button>
         </div>
       </div>
@@ -430,7 +430,7 @@ export default function Productos() {
             onClick={() => setMostrarStockBajo(!mostrarStockBajo)}
           >
             <span>
-              \u26a0\ufe0f {productosStockBajo.length} producto{productosStockBajo.length !== 1 ? 's' : ''} con inventario bajo (\u2264{STOCK_BAJO_UMBRAL})
+              ⚠️ {productosStockBajo.length} producto{productosStockBajo.length !== 1 ? 's' : ''} con inventario bajo (≤{STOCK_BAJO_UMBRAL})
             </span>
             <i className={`bi ${mostrarStockBajo ? 'bi-chevron-up' : 'bi-chevron-down'} fs-5`} />
           </button>
@@ -441,7 +441,7 @@ export default function Productos() {
                   <tr>
                     <th>Producto</th>
                     <th className="text-center" style={{ width: 100 }}>Inventario</th>
-                    <th className="text-center" style={{ width: 80 }}>Acci\u00f3n</th>
+                    <th className="text-center" style={{ width: 80 }}>Acción</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -511,7 +511,7 @@ export default function Productos() {
             <div className="row g-3">
 
               <div className="col-md-5">
-                <label className="form-label fw-semibold mb-1">C\u00f3digo *</label>
+                <label className="form-label fw-semibold mb-1">Código *</label>
                 <div className="input-group">
                   <input
                     ref={inputCodigoRef}
@@ -527,16 +527,16 @@ export default function Productos() {
                     type="button"
                     className="btn btn-outline-success"
                     onClick={handleGenerarCodigo}
-                    title="Generar c\u00f3digo interno"
+                    title="Generar código interno"
                   >
                     <i className="bi bi-dice-5-fill me-1" />Generar
                   </button>
                 </div>
-                <div className="text-muted mt-1" style={{ fontSize: '0.8rem' }}>C\u00f3digos internos: 99XXXXXXXX</div>
+                <div className="text-muted mt-1" style={{ fontSize: '0.8rem' }}>Códigos internos: 99XXXXXXXX</div>
               </div>
 
               <div className="col-md-7">
-                <label className="form-label fw-semibold mb-1">Descripci\u00f3n *</label>
+                <label className="form-label fw-semibold mb-1">Descripción *</label>
                 <input
                   type="text"
                   name="descripcion"
@@ -616,7 +616,7 @@ export default function Productos() {
                     style={{ width: '1.4em', height: '1.4em' }}
                   />
                   <label className="form-check-label fw-semibold ms-2 fs-6" htmlFor="imprimirCodigo">
-                    Imprimir c\u00f3digo al guardar
+                    Imprimir código al guardar
                   </label>
                 </div>
 
@@ -640,7 +640,7 @@ export default function Productos() {
           <div>
             <div className="row g-2 mb-3">
               <div className="col-md-6">
-                <label className="form-label fw-semibold mb-1">Buscar por c\u00f3digo o descripci\u00f3n</label>
+                <label className="form-label fw-semibold mb-1">Buscar por código o descripción</label>
                 <input
                   ref={inputBusquedaRef}
                   type="text"
@@ -667,7 +667,7 @@ export default function Productos() {
                 {!busquedaProducto.trim() ? (
                   <div className="text-center text-muted py-5">
                     <i className="bi bi-upc-scan fs-1 d-block mb-3 opacity-50" />
-                    <div className="fs-5">Escribe para buscar o escanea un c\u00f3digo</div>
+                    <div className="fs-5">Escribe para buscar o escanea un código</div>
                   </div>
                 ) : productosFiltrados.length === 0 ? (
                   <div className="text-center text-muted py-5">
@@ -678,8 +678,8 @@ export default function Productos() {
                   <table className="table table-hover mb-0" style={{ fontSize: '1rem' }}>
                     <thead className="table-light sticky-top">
                       <tr>
-                        <th className="py-3">Descripci\u00f3n</th>
-                        <th className="py-3">C\u00f3digo</th>
+                        <th className="py-3">Descripción</th>
+                        <th className="py-3">Código</th>
                         <th className="py-3">Proveedor</th>
                         <th className="text-end py-3">Precio</th>
                         <th className="text-center py-3">Inventario</th>
@@ -695,7 +695,7 @@ export default function Productos() {
                         >
                           <td className="fw-semibold fs-6">{p.descripcion}</td>
                           <td className="text-muted">{p.codigo}</td>
-                          <td className="text-muted">{p.proveedor || '\u2014'}</td>
+                          <td className="text-muted">{p.proveedor || '—'}</td>
                           <td className="text-end fw-bold">${Number(p.precio || 0).toFixed(2)}</td>
                           <td className="text-center">
                             <span className={`badge fs-6 px-3 py-2 ${inventarioBadge(p.cantidad)}`}>
@@ -729,12 +729,12 @@ export default function Productos() {
 
                 <div className="row g-3 mb-4">
                   <div className="col-md-3">
-                    <label className="form-label fw-semibold mb-1">C\u00f3digo</label>
+                    <label className="form-label fw-semibold mb-1">Código</label>
                     <input type="text" className="form-control form-control-lg" value={codigoEdit}
                       onChange={(e) => setCodigoEdit(e.target.value)} />
                   </div>
                   <div className="col-md-5">
-                    <label className="form-label fw-semibold mb-1">Descripci\u00f3n</label>
+                    <label className="form-label fw-semibold mb-1">Descripción</label>
                     <input type="text" className="form-control form-control-lg" value={descripcionEdit}
                       onChange={(e) => setDescripcionEdit(e.target.value)} />
                   </div>

@@ -17,7 +17,6 @@ const ETIQUETA_PAGO = {
  * Si nunca hubo corte, toma todo el historial.
  */
 function calcularDesdeUltimoCorte(ultimosAbonos = [], ultimasVentas = []) {
-  // Buscar el abono más reciente que dejó nuevoSaldo === 0
   const abonosOrdenados = [...ultimosAbonos].sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
   const ultimoCorte = abonosOrdenados.find(a => (a.nuevoSaldo || 0) === 0);
   const fechaCorte = ultimoCorte ? new Date(ultimoCorte.fecha) : null;
@@ -108,16 +107,19 @@ export default function Cuentas() {
   });
 
   const abonoMutation = useMutation({
+    // El backend ahora retorna el Abono directamente (res.data = Abono)
     mutationFn: (monto) =>
       axios.post(`/api/cuentas/${cuentaExpandida.id}/abonar?monto=${monto}&tipoPago=${modoPagoAbono}`),
     onSuccess: (res) => {
+      // res.data ES el objeto Abono: { id, cantidad, viejoSaldo, nuevoSaldo, tipoPago, fecha, cuentaId }
       const abonoCreado = res.data;
       queryClient.invalidateQueries({ queryKey: ['cuentas-resumen'] });
       queryClient.invalidateQueries({ queryKey: ['cuenta-detalle', cuentaExpandida?.id] });
       setMontoAbono('');
       setAbonoEnDolares('');
+      // tipoPago viene en abonoCreado.tipoPago; se pasa como 3er arg para la etiqueta del recibo
       if (window.confirm('✅ Abono registrado.\n\n¿Desea imprimir el recibo?'))
-        imprimirRecibo(abonoCreado, cuentaExpandida, modoPagoAbono);
+        imprimirRecibo(abonoCreado, cuentaExpandida, abonoCreado.tipoPago || modoPagoAbono);
     },
     onError: (e) => alert('❌ Error: ' + (e.response?.data?.message || e.message)),
   });
@@ -135,7 +137,6 @@ export default function Cuentas() {
     saldoTotal: datosFiltrados.reduce((s, c) => s + (c?.saldo || 0), 0),
   }), [datosFiltrados]);
 
-  // Resumen desde último corte para el panel derecho
   const resumenCorte = useMemo(() => {
     if (!detalleCuenta) return null;
     return calcularDesdeUltimoCorte(detalleCuenta.ultimosAbonos, detalleCuenta.ultimasVentas);
@@ -253,7 +254,7 @@ export default function Cuentas() {
       {/* CUERPO 2 COLUMNAS */}
       <div className="flex-fill d-flex overflow-hidden">
 
-        {/* COLUMNA IZQUIERDA: tabla de clientes */}
+        {/* COLUMNA IZQUIERDA */}
         <div className="d-flex flex-column border-end" style={{ width: cuentaExpandida ? '38%' : '100%', minWidth: 280, transition: 'width 0.2s' }}>
           {datosFiltrados.length === 0 ? (
             <div className="text-center text-muted p-5">
@@ -319,11 +320,10 @@ export default function Cuentas() {
           )}
         </div>
 
-        {/* COLUMNA DERECHA: detalle del cliente */}
+        {/* COLUMNA DERECHA */}
         {cuentaExpandida && (
           <div className="d-flex flex-column flex-fill overflow-hidden bg-body">
 
-            {/* Header detalle */}
             <div className="px-3 py-2 border-bottom d-flex justify-content-between align-items-center bg-body-tertiary flex-shrink-0">
               <div>
                 <h5 className="mb-0 fw-bold">👤 {cuentaExpandida.nombre}</h5>
@@ -445,7 +445,13 @@ export default function Cuentas() {
                                     <small className="text-muted">{formatFecha(a?.fecha)}</small>
                                     {esCorte && <span className="badge bg-success ms-1" style={{fontSize:'0.6rem'}}>✂ Corte</span>}
                                   </td>
-                                  <td><button className="btn btn-sm btn-outline-secondary" onClick={() => imprimirRecibo(a, cuentaExpandida, tp)} title="Recibo"><i className="bi bi-printer" />Imprimir</button></td>
+                                  <td>
+                                    <button className="btn btn-sm btn-outline-secondary"
+                                      onClick={() => imprimirRecibo(a, cuentaExpandida, a?.tipoPago || 'PESOS')}
+                                      title="Recibo">
+                                      <i className="bi bi-printer" />
+                                    </button>
+                                  </td>
                                 </tr>
                               );
                             })}
@@ -484,7 +490,6 @@ export default function Cuentas() {
                         </table>
                       </div>
 
-                      {/* Detalle productos de la venta */}
                       {ventaSeleccionada && (
                         <div className="card-footer p-0">
                           <div className="bg-body-tertiary px-3 py-2 d-flex justify-content-between align-items-center">

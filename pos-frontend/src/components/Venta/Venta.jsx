@@ -396,10 +396,8 @@ export default function Venta() {
     );
   };
 
-  // splitActivo = modo split con al menos un ítem seleccionado
   const splitActivo = modoSplit && seleccionados.size > 0;
 
-  // Variables activas según modo (split o normal)
   const cobroActivo   = splitActivo ? cobroSplit   : cobro;
   const totalActivo   = splitActivo ? totalSplit   : total;
   const cambioActivo  = splitActivo ? cambioSplit  : cambio;
@@ -435,7 +433,6 @@ export default function Venta() {
         padding: '8px 16px', gap: '8px',
       }}>
 
-        {/* HEADER */}
         <div
           className="rounded px-3 py-2 text-white d-flex align-items-center justify-content-between flex-shrink-0"
           style={{ background: 'linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%)', minHeight: '52px' }}
@@ -457,10 +454,8 @@ export default function Venta() {
           </div>
         </div>
 
-        {/* CUERPO */}
         <div style={{ display: 'flex', gap: '12px', flex: 1, minHeight: 0 }}>
 
-          {/* COLUMNA IZQUIERDA */}
           <div style={{ flex: '1 1 55%', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
             <ProductoSearch
               busquedaCodigo={busquedaCodigo} setBusquedaCodigo={setBusquedaCodigo}
@@ -472,7 +467,6 @@ export default function Venta() {
               productos={productos}
             />
 
-            {/* BARRA SPLIT */}
             {venta.length > 0 && (
               <div className="d-flex align-items-center gap-2 flex-shrink-0">
                 {!modoSplit ? (
@@ -486,10 +480,7 @@ export default function Venta() {
                 ) : (
                   <>
                     <button className="btn btn-outline-secondary btn-sm" onClick={cancelarSplit}>✕ Cancelar split</button>
-                    <button
-                      className="btn btn-outline-primary btn-sm"
-                      onClick={toggleTodosSeleccionados}
-                    >
+                    <button className="btn btn-outline-primary btn-sm" onClick={toggleTodosSeleccionados}>
                       {seleccionados.size === venta.length ? '☐ Deseleccionar todo' : '☑ Seleccionar todo'}
                     </button>
                     {seleccionados.size > 0 && (
@@ -516,33 +507,38 @@ export default function Venta() {
             </div>
           </div>
 
-          {/* COLUMNA DERECHA — interfaz única, misma estructura siempre */}
           <div style={{ flex: '0 0 380px', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: 0 }}>
 
-            {/* Tarjeta de total */}
             {(!modoSplit || splitActivo) && (
               <div style={{ flexShrink: 0 }}>
                 <div className={`rounded p-3 mb-2 text-center ${
                   cobroActivo.modoPrestamo ? 'bg-warning-subtle border border-warning' : 'bg-success-subtle border border-success'
                 }`}>
-                  <div className={`fw-bold mb-1 ${
-                    cobroActivo.modoPrestamo ? 'text-warning' : 'text-success'
-                  }`} style={{ fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: 1 }}>
-                    {splitActivo
-                      ? (✂️ Cobro parcial
+                  <div
+                    className={`fw-bold mb-1 ${cobroActivo.modoPrestamo ? 'text-warning' : 'text-success'}`}
+                    style={{ fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: 1 }}
+                  >
+                    {splitActivo ? (
+                      <>
+                        ✂️ Cobro parcial
                         <span className="ms-2 fw-normal text-muted" style={{ fontSize: '0.8rem' }}>
                           ({seleccionados.size} ítem{seleccionados.size !== 1 ? 's' : ''})
-                        </span>)
-                      : cobroActivo.modoPrestamo ? '📋 Total Fiado' : '💵 Total a Cobrar'
-                    }
+                        </span>
+                      </>
+                    ) : (
+                      cobroActivo.modoPrestamo ? '📋 Total Fiado' : '💵 Total a Cobrar'
+                    )}
                   </div>
-                  <div className={`fw-bold ${
-                    cobroActivo.modoPrestamo ? 'text-warning' : 'text-success'
-                  }`} style={{ fontSize: '2.6rem', lineHeight: 1 }}>
+                  <div
+                    className={`fw-bold ${cobroActivo.modoPrestamo ? 'text-warning' : 'text-success'}`}
+                    style={{ fontSize: '2.6rem', lineHeight: 1 }}
+                  >
                     {formatMoney(totalActivo)}
                   </div>
                   {!cobroActivo.modoPrestamo && cambioActivo >= 0 && pagoMXNActivo > 0 && (
-                    <div className="mt-2 text-success fw-semibold" style={{ fontSize: '1.1rem' }}>💵 Cambio: {formatMoney(cambioActivo)}</div>
+                    <div className="mt-2 text-success fw-semibold" style={{ fontSize: '1.1rem' }}>
+                      💵 Cambio: {formatMoney(cambioActivo)}
+                    </div>
                   )}
                   <div className="text-muted mt-1" style={{ fontSize: '0.8rem' }}>
                     {splitActivo
@@ -552,10 +548,13 @@ export default function Venta() {
                   </div>
                 </div>
 
-                {/* Botones de acción */}
                 <div className="d-flex gap-2">
                   {!splitActivo && (
-                    <button className="btn btn-outline-secondary fw-bold" style={{ height: '60px', minWidth: '110px', fontSize: '1rem' }} onClick={limpiarVenta}>
+                    <button
+                      className="btn btn-outline-secondary fw-bold"
+                      style={{ height: '60px', minWidth: '110px', fontSize: '1rem' }}
+                      onClick={limpiarVenta}
+                    >
                       <i className="bi bi-arrow-repeat me-1" />Limpiar
                     </button>
                   )}
@@ -573,9 +572,7 @@ export default function Venta() {
                       (cobroActivo.modoPrestamo && !cobroActivo.cuentaSeleccionada)
                     }
                   >
-                    <i className={`bi me-2 ${
-                      cobroActivo.modoPrestamo ? 'bi-person-check-fill' : 'bi-check-circle-fill'
-                    }`} />
+                    <i className={`bi me-2 ${cobroActivo.modoPrestamo ? 'bi-person-check-fill' : 'bi-check-circle-fill'}`} />
                     {cobroActivo.modoPrestamo
                       ? (splitActivo ? 'Fiado parcial' : 'Fiado')
                       : (splitActivo ? '✂️ Cobrar parcial' : 'Cobrar')
@@ -585,7 +582,6 @@ export default function Venta() {
               </div>
             )}
 
-            {/* Formulario de cobro — visible en normal y en split activo */}
             {(!modoSplit || splitActivo) && (
               <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <ModoPago
@@ -626,7 +622,6 @@ export default function Venta() {
               </div>
             )}
 
-            {/* Cuando el split está activo pero sin selección — instrucción */}
             {modoSplit && !splitActivo && (
               <div className="text-center text-muted py-4">
                 <div style={{ fontSize: '2.5rem' }}>✂️</div>

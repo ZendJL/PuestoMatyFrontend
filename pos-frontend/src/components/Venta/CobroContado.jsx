@@ -25,7 +25,7 @@ export default function CobroContado({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
 
-      {/* TASA DE CAMBIO — siempre visible */}
+      {/* TASA DE CAMBIO */}
       <div className="p-2 rounded border" style={{ background: 'var(--bs-body-bg, #fff)' }}>
         <label className="form-label fw-semibold mb-1" style={{ fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: 1 }}>
           💱 Tipo de cambio
@@ -87,6 +87,16 @@ export default function CobroContado({
             />
           </div>
           <div className="d-flex flex-wrap gap-2 mt-2">
+            {/* Botón Pago exacto */}
+            <button
+              type="button"
+              className="btn btn-primary fw-bold"
+              style={{ fontSize: '1rem', minWidth: '64px', padding: '8px 10px' }}
+              onClick={() => aplicarDenominacion(total)}
+            >
+              💯 Exacto
+            </button>
+            {/* Denominaciones rápidas */}
             {DENOMINACIONES.map((monto) => (
               <button key={monto} type="button"
                 className="btn btn-outline-primary fw-bold"
@@ -147,7 +157,7 @@ export default function CobroContado({
         </div>
       )}
 
-      {/* PAGO MIXTO — pesos + dólares + tarjeta */}
+      {/* PAGO MIXTO */}
       {modoPago === MODO_PAGO.MIXTO && (
         <div>
           <div className="mb-2">

@@ -16,7 +16,7 @@ const ETIQUETA_MODO_PAGO = {
   PESOS:   '🇲🇽 Pesos mexicanos',
   DOLARES: '🇺🇸 Dólares',
   TARJETA: '💳 Tarjeta',
-  MIXTO:   '🔀 Mixto (pesos + dólares)',
+  MIXTO:   '🔀 Mixto (pesos + dólares + tarjeta)',
 };
 
 // Estado vacío de cobro — reutilizable para venta principal y split
@@ -538,8 +538,8 @@ export default function Venta() {
                   <span>✂️ Cobrar selección — {formatMoney(totalSplit)}</span>
                   <span className="opacity-75" style={{ fontSize: '0.85rem' }}>{seleccionados.size} ítem{seleccionados.size !== 1 ? 's' : ''}</span>
                 </div>
-                <div className="card-body p-2" style={{ maxHeight: 340, overflowY: 'auto' }}>
-                  {/* Modo pago split */}
+                {/* FIX: sin maxHeight para que el botón de cobrar siempre sea visible */}
+                <div className="card-body p-2" style={{ overflowY: 'auto' }}>
                   <ModoPago
                     modoPrestamo={cobroSplit.modoPrestamo}
                     setModoPrestamo={(v) => setSplitVal('modoPrestamo', v)}
@@ -575,8 +575,11 @@ export default function Venta() {
                       setPagoMixtoTarjeta={(v) => setSplitVal('pagoMixtoTarjeta', v)}
                     />
                   )}
+                </div>
+                {/* FIX: botón fuera del área scrolleable en card-footer para siempre ser visible */}
+                <div className="card-footer p-2 bg-transparent border-top-0">
                   <button
-                    className="btn btn-info text-white fw-bold w-100 mt-2"
+                    className="btn btn-info text-white fw-bold w-100"
                     style={{ fontSize: '1.1rem', height: 48 }}
                     onClick={handleCobrarSplit}
                   >
